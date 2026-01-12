@@ -1,0 +1,12 @@
+[project]
+name = "agentic-pcb-design-assistant"
+version = "0.1.0"
+description = "An agentic PCB design automation assistant"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "matplotlib>=3.10.8",
+    "numpy>=2.4.1",
+    "pandas>=2.3.3",
+    "pydantic-ai>=1.41.0",
+]
