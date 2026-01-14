@@ -1,0 +1,30 @@
+from pydantic_settings import BaseSettings
+from pydantic import Field
+import yaml
+from pathlib import Path
+from typing import TypedDict
+
+
+class LLMConfigDict(TypedDict):
+    model_name: str
+    base_url: str
+    temperature: float
+
+class LLMSettings(BaseSettings):
+    model_name: str = Field("gemma3", description="LLM model name")
+    base_url: str = Field("http://localhost:11434/v1", description="Ollama base URL")
+    temperature: float = Field(0.4, description="Generation temperature")
+    
+
+def load_settings() -> LLMSettings:
+    """Load YAML config file and initialise LLM model settings"""
+    
+    config_path: Path = Path("./config.yaml")
+    if not config_path.exists():
+        return LLMSettings() #type:ignore
+    
+    with config_path.open("r", encoding="utf-8") as f:
+        data = yaml.safe_load(f) or {}
+    # Handle nested 'llm:' structure
+    llm_config: LLMConfigDict = data.get("llm", {})
+    return LLMSettings(model_name=llm_config["model_name"], base_url=llm_config["base_url"], temperature=llm_config["temperature"])

@@ -1,10 +1,17 @@
 from typing import Optional, Literal
+import subprocess
+from health import is_ollama_running
 from datetime import datetime
 from pydantic import BaseModel, Field
-from pydantic_ai import Agent
+from pydantic_ai import Agent, ModelSettings, ToolOutput
 from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.providers.ollama import OllamaProvider
 
+from settings import load_settings, LLMSettings
+
+###########################################
+# Data models for the agent
+###########################################
 class Checkpoint(BaseModel):
     """A verified checkpoint was reached"""
     name: str = Field(..., description="Name of the checkpoint")
@@ -41,20 +48,34 @@ class FinalOutput(BaseModel):
     summary: str = Field(..., description="Executive summary of results")
     recommendations: Optional[list[str]] = Field(default_factory=list)
 
-class AgentOutput(BaseModel):
-    """Union output type for Agent class - handles all possible responses."""
-    __discriminator_value__: str = "type"
-    type: Literal["action", "state_update", "tester_call", "final"] = Field(..., discriminator='type')
+###########################################
+# LLM model
+###########################################
+def get_llm_model(llm_settings: LLMSettings) -> OpenAIChatModel:
+    """
+    Get the LLM model from configurations
     
-    # Discriminated union fields
-    action: Optional[AgentAction] = Field(None, description="Next action to take")
-    state: Optional[AgentState] = Field(None, description="Updated state")
-    tester: Optional[TesterCall] = Field(None, description="Tester verification request")
-    final: Optional[FinalOutput] = Field(None, description="Final completion")
+    :return: ollama model with the preferred model and provider
+    :rtype: OpenAIChatModel
+    """
+    if not is_ollama_running():
+        print("Starting ollama")
+        subprocess.Popen(["ollama", "serve"])
+    ollama_model = OpenAIChatModel(
+    model_name=llm_settings.model_name,
+    provider=OllamaProvider(base_url=llm_settings.base_url)
+    )
+    
+    return ollama_model
 
-ollama_model = OpenAIChatModel(
-    model_name='gemma3',
-    provider=OllamaProvider(base_url='http://localhost:11434/v1')
+llm_settings: LLMSettings = load_settings()
+agent = Agent(
+    get_llm_model(llm_settings),
+    model_settings=ModelSettings(temperature=llm_settings.temperature),
+    output_type=[
+        ToolOutput(AgentAction, name="next_action", description="Next agent action"),
+        ToolOutput(AgentState, name="state_update", description="State update"),
+        ToolOutput(TesterCall, name="tester_call", description="Verification request"),
+        ToolOutput(FinalOutput, name="final_result", description="Final completion")
+    ]
 )
-
-agent = Agent(ollama_model, output_type=AgentOutput)

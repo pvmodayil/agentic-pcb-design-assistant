@@ -23,6 +23,7 @@ dependencies = [
     { name = "numpy" },
     { name = "pandas" },
     { name = "pydantic-ai" },
+    { name = "pydantic-settings" },
 ]
 
 [package.metadata]
@@ -31,6 +32,7 @@ requires-dist = [
     { name = "numpy", specifier = ">=2.4.1" },
     { name = "pandas", specifier = ">=2.3.3" },
     { name = "pydantic-ai", specifier = ">=1.41.0" },
+    { name = "pydantic-settings", specifier = ">=2.12.0" },
 ]
 
 [[package]]
