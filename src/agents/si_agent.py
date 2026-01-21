@@ -1,13 +1,10 @@
 from typing import Optional, Literal
-import subprocess
-from health import is_ollama_running
+from llm_model import get_llm_model
 from datetime import datetime
 from pydantic import BaseModel, Field
 from pydantic_ai import Agent, ModelSettings, ToolOutput
-from pydantic_ai.models.openai import OpenAIChatModel
-from pydantic_ai.providers.ollama import OllamaProvider
 
-from settings import load_settings, LLMSettings
+from config.settings import load_settings, LLMSettings
 
 ###########################################
 # Data models for the agent
@@ -47,26 +44,6 @@ class FinalOutput(BaseModel):
     state: AgentState = Field(..., description="Final agent state")
     summary: str = Field(..., description="Executive summary of results")
     recommendations: Optional[list[str]] = Field(default_factory=list)
-
-###########################################
-# LLM model
-###########################################
-def get_llm_model(llm_settings: LLMSettings) -> OpenAIChatModel:
-    """
-    Get the LLM model from configurations
-    
-    :return: ollama model with the preferred model and provider
-    :rtype: OpenAIChatModel
-    """
-    if not is_ollama_running():
-        print("Starting ollama")
-        subprocess.Popen(["ollama", "serve"])
-    ollama_model = OpenAIChatModel(
-    model_name=llm_settings.model_name,
-    provider=OllamaProvider(base_url=llm_settings.base_url)
-    )
-    
-    return ollama_model
 
 llm_settings: LLMSettings = load_settings()
 agent = Agent(
