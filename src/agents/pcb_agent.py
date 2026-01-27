@@ -1,9 +1,9 @@
 from typing import Optional, Literal, Any
-from collections.abc import Sequence, Callable
+from collections.abc import Sequence
 from datetime import datetime
 
 from pydantic import BaseModel, Field
-from pydantic_ai import Agent, AgentRunResult, ModelSettings, ToolOutput, ModelMessage, DeferredToolResults
+from pydantic_ai import Agent, AgentRunResult, ModelSettings, ModelMessage, DeferredToolResults
 
 from llm_model import get_llm_model
 from config.settings import load_settings, LLMSettings
@@ -16,20 +16,24 @@ class Checkpoint(BaseModel):
     name: str = Field(..., description="Name of the checkpoint")
     status: Literal["pending", "completed"] = Field(..., description="status of this checkpoint")
     timestamp: datetime = Field(default_factory=datetime.now)
-    
+
+class ToolCall(BaseModel):
+    tool_name: str
+    tool_args: dict[str, Any]   
+
 class AgentAction(BaseModel):
     """List of possible actions for the agent"""
     action_type: Literal["proceed", "ask_human", "use_tool", "test", "update state", "conclude"] = Field(..., description="Action type to be take by the agent")
     checkpoint_name: Optional[str] = Field(None, description="Target checkpoint for proceed/use_tool")
     question_to_human: Optional[str] = Field(None, description="Question for human feedback")
-    tool_name: Optional[str] = Field(None, description="Tool to call")
-    tool_args: Optional[dict] = Field(None, description="Arguments for the tool")
+    tool_call: Optional[ToolCall]
+    new_state: Optional[AgentState]
 
 class AgentState(BaseModel):
     """Current state tracking for the agent."""
+    version: int =Field(default=1, description="Version of the state")
     current_checkpoint: str = Field(..., description="Name of current checkpoint")
     checkpoints: list[Checkpoint] = Field(default_factory=list)
-    actions_history: list[AgentAction] = Field(default_factory=list)
     needs_human_input: bool = Field(default=False, description="Flag for human feedback required")
     human_response: Optional[str] = Field(default=None, description="Latest human feedback")
     conclusion: Optional[str] = Field(default=None, description="Final conclusion when task completed")
@@ -46,6 +50,11 @@ class FinalOutput(BaseModel):
     summary: str = Field(..., description="Executive summary of results")
     recommendations: Optional[list[str]] = Field(default_factory=list)
 
+class ToolSchema(BaseModel):
+    name: str
+    description: str
+    parameters: dict[str, Any]
+
 ###########################################
 # PCB Agent (Abstract agent class)
 ###########################################
@@ -53,8 +62,8 @@ class PCBAgentConfig(BaseModel):
     role: Literal["signal-integrity(SI)", "power-integrity(PI)", "LayerStackup"] = Field(...,description="Name of the agent")
     purpose: str = Field(...,description="Define purpose of the agent")
     mcp_servers: Sequence[str] = Field(default_factory=list, description="list of the MCP server URLs")
-    tool_list: Sequence[Callable] = Field(default_factory=list, description="List of callable functions")
-    tester_tools: Sequence[Callable] = Field(default_factory=list, description="List of test functions")
+    tool_list: dict[str, ToolSchema] = Field(default_factory=dict, description="List of callable functions")
+    tester_tools: dict[str, ToolSchema] = Field(default_factory=dict, description="List of test functions")
     previous_experience: Optional[str] = Field(None, description="Previous experience to be added in the context")
     
 class PCBAgent:
@@ -114,13 +123,15 @@ class PCBAgent:
         return result
     
     def run_workflow(self, user_prompt: str) -> FinalOutput:
-        current_state: AgentState = AgentState(current_checkpoint="Process Start")
+        STATES: list[str] = ["ANALYSING", "TOOL_CALL", "HUMAN_INPUT", "TESTING", "COMPLETED", "FAILED"]
+        
+        current_state: AgentState = AgentState(current_checkpoint="INITIAL")
         process_running: bool = True
         task: str = f"""
         Task defined by the user: {user_prompt}
         """
         while process_running:
-            task += f"\n\nCurrent State: \n{current_state.model_dump_json()}"
+            task += f"\n\nCurrent State: \n{current_state.model_dump(mode="jsonable_encode")}"
             result: AgentRunResult = self.run_analysis(user_prompt=task)
             last_output = result.output
             
