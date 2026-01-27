@@ -16,7 +16,7 @@ class LLMSettings(BaseSettings):
     temperature: float = Field(0.4, description="Generation temperature")
     
 
-def load_settings() -> LLMSettings:
+def load_settings(key: str) -> LLMSettings:
     """Load YAML config file and initialise LLM model settings"""
     
     config_path: Path = Path("./config.yaml")
@@ -26,5 +26,5 @@ def load_settings() -> LLMSettings:
     with config_path.open("r", encoding="utf-8") as f:
         data = yaml.safe_load(f) or {}
     # Handle nested 'llm:' structure
-    llm_config: LLMConfigDict = data.get("llm", {})
+    llm_config: LLMConfigDict = data.get(key, {})
     return LLMSettings(model_name=llm_config["model_name"], base_url=llm_config["base_url"], temperature=llm_config["temperature"])

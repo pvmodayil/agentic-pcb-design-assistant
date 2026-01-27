@@ -56,6 +56,38 @@ class ToolSchema(BaseModel):
     parameters: dict[str, Any]
 
 ###########################################
+# Memory Agent
+###########################################
+class MEMAgent:
+    """Memory management agent for relevant context generation"""
+    def __init__(self, workflow: str) -> None:
+        system_prompt: str = f"""
+        You are an expert PCB design assistant engaged in the '{workflow}' workflow. You main task is to assist the process by contextualizing 
+        relevant information from the entire message log. You must focus only on the most relevant infromation that will help with the query.
+        """
+        self.mem_agent = Agent(
+            get_llm_model(llm_settings=load_settings(key="mem_llm")),
+            model_settings=ModelSettings(temperature=0.3),
+            system_prompt=system_prompt
+        )
+    
+    def _relevant_context(self, query: str, message_history: list[ModelMessage]) -> list[ModelMessage]:
+        memory_prompt: str =f"""
+        Current query: {query}
+        
+        From recent conversation, create a COMPACT memory state (200 words max) that:
+        1. Summarizes KEY insights/decisions relevant to this query
+        2. Notes any ERRORS/feedback from previous steps  
+        3. Lists ACTIVE context (current checkpoint, open issues)
+        4. Forgets irrelevant details 
+        """
+        context: list[ModelMessage] = self.mem_agent.run_sync(user_prompt=memory_prompt,
+                                               message_history=message_history).new_messages()
+        
+        return context
+        
+        
+###########################################
 # PCB Agent (Abstract agent class)
 ###########################################
 class PCBAgentConfig(BaseModel):
@@ -65,17 +97,20 @@ class PCBAgentConfig(BaseModel):
     tool_list: dict[str, ToolSchema] = Field(default_factory=dict, description="List of callable functions")
     tester_tools: dict[str, ToolSchema] = Field(default_factory=dict, description="List of test functions")
     previous_experience: Optional[str] = Field(None, description="Previous experience to be added in the context")
-    
+
 class PCBAgent:
     """Abstract PCB Agent Class"""
     def __init__(self, agent_config: PCBAgentConfig ) -> None:
+        # Memory Agent
+        self.mem_agent: MEMAgent = MEMAgent(workflow=self.agent_config.role)
+        
         # Agent settings
         self.agent_config: PCBAgentConfig = agent_config
-        llm_settings: LLMSettings = load_settings()
+        llm_settings: LLMSettings = load_settings(key="llm")
         
         # Agent context
         self.system_prompt: str = self._build_system_prompt()
-        self.message_history: Sequence[ModelMessage] | None = None
+        self.message_history: list[ModelMessage] = []
         self.previous_experience: Optional[str] = self.agent_config.previous_experience
         
         # Output types
@@ -111,35 +146,35 @@ class PCBAgent:
         """
         return system_prompt
     
-    def run_analysis(self, user_prompt: str, tool_result: Optional[DeferredToolResults] = None) -> AgentRunResult:
+    def run_analysis(self, query: str, tool_result: Optional[DeferredToolResults] = None) -> AgentRunResult:
         """Synchronously run one analysis"""
         
-        result: AgentRunResult = self.agent.run_sync(user_prompt=user_prompt,
-                                     message_history=self.message_history,
+        result: AgentRunResult = self.agent.run_sync(user_prompt=query,
+                                     message_history=self.mem_agent._relevant_context(query=query,message_history=self.message_history),
                                      deferred_tool_results=tool_result)
 
-        self.message_history = result.all_messages()
+        self.message_history.extend(result.new_messages())
         
         return result
-    
-    def run_workflow(self, user_prompt: str) -> FinalOutput:
-        STATES: list[str] = ["ANALYSING", "TOOL_CALL", "HUMAN_INPUT", "TESTING", "COMPLETED", "FAILED"]
         
-        current_state: AgentState = AgentState(current_checkpoint="INITIAL")
-        process_running: bool = True
-        task: str = f"""
-        Task defined by the user: {user_prompt}
-        """
-        while process_running:
-            task += f"\n\nCurrent State: \n{current_state.model_dump(mode="jsonable_encode")}"
-            result: AgentRunResult = self.run_analysis(user_prompt=task)
-            last_output = result.output
+    # def run_workflow(self, user_prompt: str) -> FinalOutput:
+    #     STATES: list[str] = ["ANALYSING", "TOOL_CALL", "HUMAN_INPUT", "TESTING", "COMPLETED", "FAILED"]
+        
+    #     current_state: AgentState = AgentState(current_checkpoint="INITIAL")
+    #     process_running: bool = True
+    #     task: str = f"""
+    #     Task defined by the user: {user_prompt}
+    #     """
+    #     while process_running:
+    #         task += f"\n\nCurrent State: \n{current_state.model_dump(mode="jsonable_encode")}"
+    #         result: AgentRunResult = self.run_analysis(query=task)
+    #         last_output = result.output
             
-            if isinstance(last_output, FinalOutput):
-                return last_output
-            elif isinstance(last_output, AgentAction):
-                # Handle the action types "proceed", "ask_human", "use_tool", "test", "update state", "conclude"
-                pass
+    #         if isinstance(last_output, FinalOutput):
+    #             return last_output
+    #         elif isinstance(last_output, AgentAction):
+    #             # Handle the action types "proceed", "ask_human", "use_tool", "test", "update state", "conclude"
+    #             pass
     
-    def handle_agent_action(self, agent_action: AgentAction) -> None:
-        pass
+    # def handle_agent_action(self, agent_action: AgentAction) -> None:
+    #     pass
