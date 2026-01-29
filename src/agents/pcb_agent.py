@@ -17,16 +17,17 @@ class Checkpoint(BaseModel):
     status: Literal["pending", "completed"] = Field(..., description="status of this checkpoint")
     timestamp: datetime = Field(default_factory=datetime.now)
 
-class ToolCall(BaseModel):
-    tool_name: str
-    tool_args: dict[str, Any]   
+class Tool(BaseModel):
+    name: str
+    description: str
+    parameters: dict[str, Any]  
 
 class AgentAction(BaseModel):
     """List of possible actions for the agent"""
     action_type: Literal["proceed", "ask_human", "use_tool", "test", "update state", "conclude"] = Field(..., description="Action type to be take by the agent")
     checkpoint_name: Optional[str] = Field(None, description="Target checkpoint for proceed/use_tool")
     question_to_human: Optional[str] = Field(None, description="Question for human feedback")
-    tool_call: Optional[ToolCall]
+    tool_call: Optional[Tool]
     new_state: Optional[AgentState]
 
 class AgentState(BaseModel):
@@ -49,11 +50,6 @@ class FinalOutput(BaseModel):
     state: AgentState = Field(..., description="Final agent state")
     summary: str = Field(..., description="Executive summary of results")
     recommendations: Optional[list[str]] = Field(default_factory=list)
-
-class ToolSchema(BaseModel):
-    name: str
-    description: str
-    parameters: dict[str, Any]
 
 ###########################################
 # Memory Agent
@@ -94,8 +90,8 @@ class PCBAgentConfig(BaseModel):
     role: Literal["signal-integrity(SI)", "power-integrity(PI)", "LayerStackup"] = Field(...,description="Name of the agent")
     purpose: str = Field(...,description="Define purpose of the agent")
     mcp_servers: Sequence[str] = Field(default_factory=list, description="list of the MCP server URLs")
-    tool_list: dict[str, ToolSchema] = Field(default_factory=dict, description="List of callable functions")
-    tester_tools: dict[str, ToolSchema] = Field(default_factory=dict, description="List of test functions")
+    tool_list: dict[str, Tool] = Field(default_factory=dict, description="List of callable functions")
+    tester_tools: dict[str, Tool] = Field(default_factory=dict, description="List of test functions")
     previous_experience: Optional[str] = Field(None, description="Previous experience to be added in the context")
 
 class PCBAgent:
@@ -156,25 +152,3 @@ class PCBAgent:
         self.message_history.extend(result.new_messages())
         
         return result
-        
-    # def run_workflow(self, user_prompt: str) -> FinalOutput:
-    #     STATES: list[str] = ["ANALYSING", "TOOL_CALL", "HUMAN_INPUT", "TESTING", "COMPLETED", "FAILED"]
-        
-    #     current_state: AgentState = AgentState(current_checkpoint="INITIAL")
-    #     process_running: bool = True
-    #     task: str = f"""
-    #     Task defined by the user: {user_prompt}
-    #     """
-    #     while process_running:
-    #         task += f"\n\nCurrent State: \n{current_state.model_dump(mode="jsonable_encode")}"
-    #         result: AgentRunResult = self.run_analysis(query=task)
-    #         last_output = result.output
-            
-    #         if isinstance(last_output, FinalOutput):
-    #             return last_output
-    #         elif isinstance(last_output, AgentAction):
-    #             # Handle the action types "proceed", "ask_human", "use_tool", "test", "update state", "conclude"
-    #             pass
-    
-    # def handle_agent_action(self, agent_action: AgentAction) -> None:
-    #     pass
