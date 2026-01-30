@@ -24,11 +24,11 @@ class Tool(BaseModel):
 
 class AgentAction(BaseModel):
     """List of possible actions for the agent"""
-    action_type: Literal["proceed", "ask_human", "use_tool", "test", "update state", "conclude"] = Field(..., description="Action type to be take by the agent")
-    checkpoint_name: Optional[str] = Field(None, description="Target checkpoint for proceed/use_tool")
-    question_to_human: Optional[str] = Field(None, description="Question for human feedback")
-    tool_call: Optional[Tool]
-    new_state: Optional[AgentState]
+    action_type: Literal["proceed", "ask_human", "use_tool", "test", "update_state", "conclude"] = Field(..., description="Action type to be take by the agent")
+    checkpoint_name: Optional[str] = Field(default=None, description="Target checkpoint for proceed/use_tool")
+    question_to_human: Optional[str] = Field(default=None, description="Question for human feedback")
+    tool_call: Optional[Tool] = Field(default=None, description="Specify the tool")
+    new_state: Optional[AgentState] = Field(default=None, description="New agent state")
 
 class AgentState(BaseModel):
     """Current state tracking for the agent."""
