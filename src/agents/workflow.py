@@ -33,7 +33,12 @@ class WorkflowState(IntEnum):
     TIMEOUT = 502
     TOOL_ERROR = 503
     AGENT_ERROR = 504
-    
+class Result(BaseModel):  
+    success: bool
+    session_id: str
+    final_state: WorkflowState
+    checkpoints: list[Checkpoint]
+    results: dict[str,Any]
 class WorkFlowContext(BaseModel):
     session_id: str
     target_checkpoint: Checkpoint
@@ -72,7 +77,7 @@ class Workflow(ABC):
                                                 target_checkpoint=target_checkpoint)
         
         self.last_safe_checkpoint: Checkpoint
-        self.results: dict[str,Any] = {}
+        self.action_results: dict[str,Any] = {}
     
     def get_next_target_checkpoint(self) -> Checkpoint:
         """
@@ -150,16 +155,13 @@ class Workflow(ABC):
                 "info": f"Step function encountered unknow action {action_type}"
             }
     
-    def get_final_results(self) -> dict[str, Any]:
+    def get_final_results(self) -> Result:
         """Get complete workflow results."""
-        return {
-            "success": self.current_state in [WorkflowState.COMPLETED, WorkflowState.PARTIAL_SUCCESS],
-            "session_id": self.workflow_context.session_id,
-            "final_state": self.current_state.value,
-            "checkpoints": self.workflow_context.history,
-            "results": self.results,
-            "config": self.config.model_dump()
-        }
+        return Result(success=self.current_state in [WorkflowState.COMPLETED, WorkflowState.PARTIAL_SUCCESS],
+                      session_id=self.workflow_context.session_id,
+                      final_state=self.current_state,
+                      checkpoints=self.workflow_context.history,
+                      results=self.action_results)
         
     @abstractmethod
     def execute_tool(self, tool_name: str) -> None:
