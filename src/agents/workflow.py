@@ -134,20 +134,21 @@ class Workflow(ABC):
     def step(self, action: AgentAction) -> dict[str, Any]:
         action_type: str = action.action_type
         try:
-            if action_type == "ask_human":
-                return {}
-            if action_type == "use_tool":
-                return {}
-            if action_type == "test":
-                return {}
-            if action_type == "proceed":
-                return {}
-            if action_type == "update_state":
-                return {}
-            if action_type == "conclude":
-                return {}
-            else:
-                raise ValueError(f"Unknown action {action}")
+            match action_type:    
+                case "ask_human":
+                    return {}
+                case "use_tool":
+                    return {}
+                case "test":
+                    return {}
+                case "proceed":
+                    return {}
+                case "update_state":
+                    return {}
+                case "conclude":
+                    return {}
+                case _:
+                    raise ValueError(f"Unknown action {action}")
         except Exception as e:
             self.state = WorkflowState.AGENT_ERROR
             return {
