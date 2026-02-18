@@ -117,7 +117,7 @@ class WorkflowResult(BaseModel):
     failed_checkpoints: list[Checkpoint]
     
     results: dict[str, Any] = Field(default_factory=dict)
-    recommendations: list[str] = Field(default_factory=list)
+    recommendations: str|None = Field(default=None, description="Recommendations from the agent")
     summary: str = Field(..., description="Executive summary")
     
     total_execution_time: float = Field(default=0.0)
@@ -170,3 +170,7 @@ class AgentState(BaseModel):
         """Increment retry counter"""
         self.retry_count += 1
         logger.warning(f"Retry count incremented to {self.retry_count}/{self.max_retries}")
+
+class Summary(BaseModel):
+    summary: str = Field(...,description="Entire workflow summary")
+    recommendation: str = Field(..., description="Recommendations for the designer")

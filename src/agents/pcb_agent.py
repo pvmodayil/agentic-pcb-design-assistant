@@ -1,4 +1,4 @@
-from typing import TypeVar, Generic
+from typing import TypeVar, Generic, Any
 from abc import ABC, abstractmethod
 import uuid
 from datetime import datetime
@@ -7,8 +7,8 @@ from pydantic_ai import Agent, AgentRunResult, ModelSettings, ModelMessage
 
 from llm_model import get_llm_model
 from config.settings import load_settings, LLMSettings
-from memory_manager import MemoryManager
-from src.agents.data_models import ToolDefinition
+from memory_manager import MemoryManager, SummaryAgent
+from src.agents.data_models import Summary, ToolDefinition
 from tool_registry import ToolRegistry, ToolFunction
 from data_models import AgentState, Checkpoint, AgentAction, WorkflowResult, WorkflowState, ToolResult, ActionResult
 
@@ -183,7 +183,7 @@ class PCBAgent(ABC, Generic[DepsType]):
             end_time: datetime = datetime.now()
             execution_time: float = (end_time - start_time).total_seconds()
             
-            return self._generate_workflow_result(
+            return await self._generate_workflow_result(
                 session_id,
                 execution_time,
                 success=(self.state.workflow_state == WorkflowState.COMPLETED)
@@ -196,7 +196,7 @@ class PCBAgent(ABC, Generic[DepsType]):
             
             end_time: datetime = datetime.now()
             execution_time: float = (end_time - start_time).total_seconds()
-            return self._generate_workflow_result(
+            return await self._generate_workflow_result(
                 session_id,
                 execution_time,
                 success=False
@@ -409,13 +409,12 @@ class PCBAgent(ABC, Generic[DepsType]):
         else:
             return "Continue with the workflow based on current state."
     
-    def _generate_workflow_result(
+    async def _generate_workflow_result(
         self, 
         session_id: str,
         execution_time: float,
         success: bool
     ) -> WorkflowResult:
-        #TODO: Final Result should be either another output type from agent or add a section in the current type
         """Generate final workflow result"""
         completed = [
             cp for cp in self.checkpoint_objects.values() 
@@ -426,8 +425,7 @@ class PCBAgent(ABC, Generic[DepsType]):
             if cp.status == "failed"
         ]
         
-        summary = self._generate_summary(success, completed, failed)
-        recommendations = self._generate_recommendations(success, failed)
+        summary, recommendations = await self._generate_llm_summary(success, completed, failed)
         
         return WorkflowResult(
             success=success,
@@ -436,44 +434,89 @@ class PCBAgent(ABC, Generic[DepsType]):
             final_state=self.state.workflow_state,
             completed_checkpoints=completed,
             failed_checkpoints=failed,
-            results=self.state.tool_results,
+            results=self.collect_final_results(),
             recommendations=recommendations,
             summary=summary,
             total_execution_time=execution_time,
             errors=self.state.errors
         )
-    
-    def _generate_summary(
+        
+    async def _generate_llm_summary(
         self, 
         success: bool, 
         completed: list[Checkpoint],
         failed: list[Checkpoint]
-    ) -> str:
-        """Generate executive summary"""
+    ) -> tuple[str,str]:
+        """LLM based executive summary and recommendations"""
+        try:
+            summary_agent: SummaryAgent = SummaryAgent()
+            
+            context: str = f"""
+            Workflow Summary Context:
+            - Workflow Type: {self.agent_type}
+            - Success Status: {success}
+            - Total Checkpoints: {len(self.checkpoint_objects)}
+            - Completed Checkpoints: {len(completed)}
+            - Failed Checkpoints: {len(failed)}
+            
+            Completed Checkpoints:
+            {[cp.name for cp in completed]}
+            
+            Failed Checkpoints:
+            {[cp.name for cp in failed]}
+            
+            Error Messages:
+            {self._get_error_messages(success, failed)}
+            """
+            summary, recommendations = await summary_agent.generate_summary(context=context)
+            
+            return summary, recommendations
+        except Exception as e:
+            logger.error(f"LLM recommendations generation failed: {e}")
+            summary, recommendations = self._generate_basic_summary(success, completed, failed)
+            
+            return summary, recommendations
+        
+    def _generate_basic_summary(
+        self, 
+        success: bool, 
+        completed: list[Checkpoint],
+        failed: list[Checkpoint]
+    ) -> tuple[str,str]:
+        """Fallback basic summary generator"""
+        
+        error_messages: list[str] = self._get_error_messages(success, failed)
         if success:
-            return f"Workflow completed successfully. {len(completed)} checkpoints completed."
+            return f"Workflow completed successfully. {len(completed)} checkpoints completed.", "No Recommendations"
         else:
-            return f"Workflow incomplete. {len(completed)} completed, {len(failed)} failed."
+            return f"Workflow incomplete. {len(completed)} completed, {len(failed)} failed.", "/n".join(error_messages)
     
-    def _generate_recommendations(
+    def _get_error_messages(
         self, 
         success: bool,
         failed: list[Checkpoint]
     ) -> list[str]:
         """Generate recommendations"""
-        recommendations = []
+        error_messages = []
         
         if not success and failed:
             for cp in failed:
                 if cp.error_message:
-                    recommendations.append(
+                    error_messages.append(
                         f"Address failure in '{cp.name}': {cp.error_message}"
                     )
         
-        return recommendations
+        return error_messages
     
+    def provide_human_input(self, response: str) -> None:
+        """Provide human response and resume workflow"""
+        self.state.human_response = response
+        self.state.needs_human_input = False
+        self.state.workflow_state = WorkflowState.HUMAN_RESPONDED
+        logger.info(f"Human input received: {response}...")
+        
     @abstractmethod
-    async def verify_checkpoint(
+    def verify_checkpoint(
         self, 
         checkpoint: Checkpoint, 
         deps: DepsType
@@ -485,9 +528,14 @@ class PCBAgent(ABC, Generic[DepsType]):
         """
         pass
     
-    def provide_human_input(self, response: str) -> None:
-        """Provide human response and resume workflow"""
-        self.state.human_response = response
-        self.state.needs_human_input = False
-        self.state.workflow_state = WorkflowState.HUMAN_RESPONDED
-        logger.info(f"Human input received: {response[:100]}...")
+    @abstractmethod
+    def collect_final_results(self) -> dict[str,Any]:
+        """
+        Collect final workflow-specific results.
+        This should be implemented by domain-specific agents.
+
+        Returns
+        -------
+        dict[str,Any]
+            Final results of the workflow
+        """

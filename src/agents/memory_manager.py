@@ -1,7 +1,8 @@
 from llm_model import get_llm_model
 from config.settings import load_settings
 
-from pydantic_ai import Agent, ModelSettings, ModelMessage
+from pydantic_ai import Agent, ModelSettings, ModelMessage, AgentRunResult
+from data_models import Summary
 ###########################################
 # Memory Agent (Think about this more)
 ###########################################
@@ -51,3 +52,38 @@ class MemoryManager:
     def add_to_message_history(self, new_message: list[ModelMessage]) -> None:
         """Add the new chat message to the message hsitory"""
         self.message_history.extend(new_message)
+        
+class SummaryAgent:
+    def __init__(self, temperature: float = 0.1) -> None:
+        self.agent = Agent(
+            model=get_llm_model(llm_settings=load_settings(key="mem_llm")),
+            model_settings=ModelSettings(temperature=temperature),
+            output_type=Summary,
+            system_prompt="You are an expert workflow analyst who provides professional summaries and recommendations."
+        )
+    
+    async def generate_summary(self, context: str) -> tuple[str,str]:
+        prompt: str = f"""
+        Based on the following workflow execution details and failures, 
+        please provide a comprehensive executive summary and actionable recommendation:
+        
+        {context}
+        
+        Please provide a professional, concise summary that:
+        1. Highlights the overall workflow outcome
+        2. Summarizes key achievements
+        3. Notes any significant issues or failures
+        4. Provides a brief assessment of the workflow quality
+        
+        Please provide 3-5 specific, actionable recommendations:
+        1. What should be done differently for future workflows?
+        2. What specific improvements can be made to prevent similar failures?
+        3. Are there any best practices or guidelines to follow?
+        If there are no specific recommendations just say "No Recommendations"
+        """
+        result: AgentRunResult[Summary] = await self.agent.run(prompt, deps=None, message_history=[])
+        
+        summary: str = result.output.summary
+        recommendations: str = result.output.recommendation
+        
+        return summary, recommendations
