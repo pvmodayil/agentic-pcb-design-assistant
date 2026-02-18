@@ -3,6 +3,7 @@ from datetime import datetime
 
 from enum import IntEnum
 
+from abc import ABC, abstractmethod
 from pydantic import BaseModel, Field, ConfigDict
 
 import logging
@@ -88,14 +89,21 @@ class AgentAction(BaseModel):
     reasoning: str = Field(..., description="Why this action is being taken")
     expected_outcome: Optional[str] = Field(default=None)
 
-class ToolDefinition(BaseModel):
-    """Definition of a tool that can be used by the agent"""
+class ToolDefinition(ABC,BaseModel):
+    """Definition of a tool that can be used by the agent
+       Each tool must implement a validate_parameters function     
+    """
     name: str = Field(..., description="Unique tool identifier")
     description: str = Field(..., description="What the tool does")
     parameters_schema: dict[str, Any] = Field(default_factory=dict, description="JSON schema for tool parameters")
     is_async: bool = Field(default=False, description="Whether tool execution is async")
     requires_human_approval: bool = Field(default=False)
     can_fail: bool = Field(default=True, description="Whether tool failure is recoverable")
+    
+    @abstractmethod
+    def validate_parameters(self, parameters: dict[str,Any]) -> Optional[list[str]]:
+        """Validate the paramters for this tool (schema and rules) return None if valid"""
+        pass
 
 class ToolResult(BaseModel):
     """Result from a tool execution"""
@@ -127,10 +135,11 @@ class ActionResult(BaseModel):
     status: Literal[
         "analyzed",
         "context_updated",
-        "retry",
-        "completed",
-        "verified",
-        "awaiting_human",
+        "tool_executed",
+        "checkpoint_verified",
+        "human_input_requested",
+        "workflow_completed",
+        "retry_required",
         "verification_failed",
         "error"] = Field(..., description="status")
     tool_result: Optional[ToolResult] = Field(default=None, description="Results from tool executions")

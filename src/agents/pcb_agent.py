@@ -231,7 +231,7 @@ class PCBAgent(ABC, Generic[DepsType]):
                 return self._update_context_action(action)
             
             elif action.action_type == "proceed_to_next":
-                return self._proceed_to_next_checkpoint(action)
+                return self._proceed_to_next_checkpoint()
             
             elif action.action_type == "retry_checkpoint":
                 return self._retry_checkpoint_action(action)
@@ -261,25 +261,34 @@ class PCBAgent(ABC, Generic[DepsType]):
         if not tool_func:
             return ActionResult(status="error", error_message=f"Unknown tool: {tool_name}")
         
-        #TODO: Have proper idea on how to pass function parameters
-        tool_def: ToolDefinition | None = self.tool_registry.get_tool_definition(tool_name)
+        tool_def: ToolDefinition = self.tool_registry.get_tool_definition(tool_name)
+        if not tool_def:
+            return ActionResult(status="error", error_message=f"Tool definition missing: {action.tool_name}")
         
-        try:
-            logger.info(f"Executing tool: {tool_name}")
+        # Validate parameters (custom validation logic for every tool)
+        parameter_errors: list|None = tool_def.validate_parameters(action.tool_parameters)
+        if not parameter_errors:
+            try:
+                logger.info(f"Executing tool: {tool_name}")
+                
+                if tool_def.is_async:
+                    tool_result: ToolResult = await tool_func(deps, **action.tool_parameters) #type:ignore
+                else:
+                    tool_result: ToolResult = tool_func(deps, **action.tool_parameters)
+                
+                # Store result
+                self.state.tool_results = tool_result
+                
+                return ActionResult(
+                    status="tool_executed",
+                    tool_result=tool_result,
+                )
             
-            tool_result: ToolResult = tool_func(deps, **action.tool_parameters)
-            
-            # Store result
-            self.state.tool_results = tool_result
-            
-            return ActionResult(
-                status="completed",
-                tool_result=tool_result,
-            )
-        
-        except Exception as e:
-            logger.error(f"Tool execution failed: {e}", exc_info=True)
-            return ActionResult(status="error", error_message=f"Tool {tool_name} execution failed: {e}")
+            except Exception as e:
+                logger.error(f"Tool execution failed: {e}", exc_info=True)
+                return ActionResult(status="error", error_message=f"Tool {tool_name} execution failed: {e}")
+        else:
+            return ActionResult(status="error", error_message=f"Tool '{tool_name}' parameters failed validation with errors: {parameter_errors}")
     
     def _verify_checkpoint_action(
         self, 
@@ -305,7 +314,7 @@ class PCBAgent(ABC, Generic[DepsType]):
             if checkpoint_name in self.state.pending_checkpoints:
                 self.state.pending_checkpoints.remove(checkpoint_name)
             
-            return ActionResult(status="verified", checkpoint=checkpoint_name)
+            return ActionResult(status="checkpoint_verified", checkpoint=checkpoint_name)
         else:
             checkpoint.mark_failed("Verification failed")
             return ActionResult(status="verification_failed", checkpoint=checkpoint_name)
@@ -316,24 +325,24 @@ class PCBAgent(ABC, Generic[DepsType]):
         self.state.human_question = action.question_for_human
         self.state.workflow_state = WorkflowState.AWAITING_HUMAN
         
-        return ActionResult(status="awaiting_human", message=action.question_for_human)
+        return ActionResult(status="human_input_requested", message=action.question_for_human)
     
     def _update_context_action(self, action: AgentAction) -> ActionResult:
         """Update workflow context"""
         self.state.context_data.update(action.context_updates)
         return ActionResult(status="context_updated", message=str(action.context_updates))
     
-    def _proceed_to_next_checkpoint(self, action: AgentAction) -> ActionResult:
+    def _proceed_to_next_checkpoint(self,) -> ActionResult:
         """Move to next checkpoint"""
         if not self.state.pending_checkpoints:
             self.state.workflow_state = WorkflowState.COMPLETED
-            return ActionResult(status="completed", message="All checkpoints completed")
+            return ActionResult(status="workflow_completed", message="All checkpoints completed")
         
         next_checkpoint = self.state.pending_checkpoints.pop(0) # Removes thge first element
         self.state.current_checkpoint = next_checkpoint
         self.checkpoint_objects[next_checkpoint].status = "in_progress"
         
-        return ActionResult(status="completed", message=f"Next checkpoint {next_checkpoint}")
+        return ActionResult(status="context_updated", message=f"Next checkpoint {next_checkpoint}")
     
     def _retry_checkpoint_action(self, action: AgentAction) -> ActionResult:
         """Retry current checkpoint"""
@@ -346,12 +355,12 @@ class PCBAgent(ABC, Generic[DepsType]):
         if checkpoint_name and checkpoint_name in self.checkpoint_objects.keys():
             self.checkpoint_objects[checkpoint_name].status = "in_progress"
         
-        return ActionResult(status="retry", checkpoint=checkpoint_name, message=f"retry number {self.state.retry_count}")
+        return ActionResult(status="retry_required", checkpoint=checkpoint_name, message=f"retry number {self.state.retry_count}")
     
     def _complete_workflow_action(self) -> ActionResult:
         """Mark workflow as complete"""
         self.state.workflow_state = WorkflowState.COMPLETED
-        return ActionResult(status="completed", message="Workflow completed")
+        return ActionResult(status="workflow_completed", message="Workflow completed")
     
     def _should_terminate(self) -> bool:
         """Check if workflow should terminate"""
@@ -403,7 +412,7 @@ class PCBAgent(ABC, Generic[DepsType]):
             return f"Checkpoint {result.checkpoint} verification failed. Please analyze and suggest fixes."
         
         elif status == "error":
-            return f"Error occurred: {result.error_message}. How should we recover?"
+            return f"Error occurred: {result.error_message}. Address this error and retry?"
         
         else:
             return "Continue with the workflow based on current state."
@@ -538,3 +547,4 @@ class PCBAgent(ABC, Generic[DepsType]):
         dict[str,Any]
             Final results of the workflow
         """
+        pass

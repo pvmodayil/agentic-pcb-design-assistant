@@ -1,4 +1,4 @@
-from typing import Optional, Any, Callable
+from typing import Any, Callable
 
 from data_models import ToolDefinition
 import logging
@@ -26,13 +26,13 @@ class ToolRegistry:
         self._tool_functions[tool_def.name] = tool_func
         logger.info(f"Registered tool: {tool_def.name}")
     
-    def get_tool_definition(self, tool_name: str) -> Optional[ToolDefinition]:
+    def get_tool_definition(self, tool_name: str) -> ToolDefinition:
         """Get tool definition by name"""
-        return self._tools.get(tool_name)
+        return self._tools.get(tool_name) #type:ignore
     
-    def get_tool_function(self, tool_name: str) -> Optional[ToolFunction]:
+    def get_tool_function(self, tool_name: str) -> ToolFunction:
         """Get tool implementation by name"""
-        return self._tool_functions.get(tool_name)
+        return self._tool_functions.get(tool_name) #type:ignore
     
     def list_tools(self) -> list[str]:
         """List all registered tool names"""
