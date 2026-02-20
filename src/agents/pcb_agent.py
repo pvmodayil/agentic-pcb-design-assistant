@@ -125,7 +125,7 @@ class PCBAgent(ABC, Generic[DepsType]):
         This orchestrates the entire workflow
         """
         session_id = str(uuid.uuid4())
-        start_time = datetime.now()
+        start_time: datetime = datetime.now()
         
         logger.info(f"Starting workflow session {session_id}")
         logger.info(f"Initial query: {initial_query}")
