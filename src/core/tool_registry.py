@@ -36,10 +36,8 @@ class ToolRegistry:
         return list(self._tools.keys())
     
     def get_tool_descriptions(self) -> str:
-        """Get formatted description of all tools"""
+        import json
         descriptions = []
         for name, tool in self._tools.items():
-            descriptions.append(
-                f"- {name}: {tool.description}"
-            )
-        return "\n".join(descriptions)
+            descriptions.append(json.dumps(tool.parameters_schema, indent=2))
+        return "\n\n".join(descriptions)

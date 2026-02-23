@@ -76,7 +76,7 @@ class PCBAgent(ABC, Generic[DepsType]):
         tool_descriptions: str = self.tool_registry.get_tool_descriptions()
         
         system_prompt: str = f"""
-        You are an expert '{self.agent_type}' agent engaged in the PCB design workflow.
+        You are an expert '{self.agent_type}' agent engaged in the PCB design workflow with the given task/goal.
         
         **Task**: {self.task}
         
@@ -91,8 +91,8 @@ class PCBAgent(ABC, Generic[DepsType]):
 
         **Action Types**:
         - analyze: Analyze current situation and plan next steps
-        - execute_tool: Use a specific tool
-        - verify_checkpoint: Verify a checkpoint is complete
+        - execute_tool: Use a specific tool from the list of available tools
+        - verify_checkpoint: Verify a completed checkpoint
         - request_human_input: Ask human for guidance
         - update_context: Update workflow context with new information
         - proceed_to_next: Move to next checkpoint
@@ -107,7 +107,10 @@ class PCBAgent(ABC, Generic[DepsType]):
         return system_prompt
     
     def _register_pydanticai_tools(self) -> None:
-        """TODO: Iterate over the tools and register it with pydanticai agent"""
+        """TODO: Iterate over the tools and register it with pydanticai agent
+        This however bypasses the fine-grained control for AgentActions as the tool
+        execution will be handled in the background before the run result is published.
+        """
         pass
     
     async def run(
@@ -272,9 +275,9 @@ class PCBAgent(ABC, Generic[DepsType]):
             try:
                 logger.info(f"Executing tool: {tool_name}")
                 if inspect.iscoroutinefunction(tool_func):
-                    tool_result: ToolResult = await tool_func(deps, **action.tool_parameters) #type:ignore
+                    tool_result: ToolResult = await tool_func(**action.tool_parameters) #type:ignore
                 else:
-                    tool_result: ToolResult = tool_func(deps, **action.tool_parameters)
+                    tool_result: ToolResult = tool_func(**action.tool_parameters)
                 
                 # Store result
                 self.state.tool_results = tool_result

@@ -91,6 +91,7 @@ class ToolDefinition(ABC,BaseModel):
             "system",        # infra, admin operations
             "other",         # fallback bucket
         ] = Field(default="other", description="Tool category")
+    takes_deps: bool = Field(default=False, description="Requires agent context or not")
     parameters: list[ToolParameter] = Field(default_factory=list, description="List of the parameter definitions")
     returns: dict[str,str] = Field(default_factory=dict, description="field_name: description")
     
