@@ -2,19 +2,16 @@ from typing import TypeVar, Generic, Any
 from abc import ABC, abstractmethod
 import uuid
 from datetime import datetime
+import inspect
 
 from pydantic_ai import Agent, AgentRunResult, ModelSettings, ModelMessage
+from loguru import logger
 
-from llm_model import get_llm_model
-from config.settings import load_settings, LLMSettings
-from memory_manager import MemoryManager, SummaryAgent
+import llm_model
+from settings import load_settings, LLMSettings
+import memory_manager
 from tool_registry import ToolRegistry, ToolFunction
-from data_models import AgentState, Checkpoint, AgentAction, WorkflowResult, WorkflowState, ToolResult, ToolDefinition,ActionResult
-
-import logging
-# Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
+from data_models import AgentState, Checkpoint, AgentAction, WorkflowResult, WorkflowState, ToolResult, ToolDefinition, ActionResult
         
             
 ###########################################
@@ -60,7 +57,7 @@ class PCBAgent(ABC, Generic[DepsType]):
         
         llm_settings: LLMSettings = load_settings(key="llm")
         self.agent = Agent(
-            model=get_llm_model(llm_settings),
+            model=llm_model.get_llm_model(llm_settings),
             model_settings=ModelSettings(temperature=llm_settings.temperature),
             deps_type=deps_type,
             output_type=AgentAction,
@@ -71,7 +68,7 @@ class PCBAgent(ABC, Generic[DepsType]):
         self._register_pydanticai_tools()
         
         # Memory manager
-        self.memory = MemoryManager(agent_type=agent_type)
+        self.memory = memory_manager.MemoryManager(agent_type=agent_type)
         
     def _build_system_prompt(self) -> str:
         """Basic wrapper for the agent specific system prompt"""
@@ -79,7 +76,7 @@ class PCBAgent(ABC, Generic[DepsType]):
         tool_descriptions: str = self.tool_registry.get_tool_descriptions()
         
         system_prompt: str = f"""
-        You are an expert '{self.agent_type}' agent engaged in the PCB design workflow.
+        You are an expert '{self.agent_type}' agent engaged in the PCB design workflow with the given task/goal.
         
         **Task**: {self.task}
         
@@ -94,8 +91,8 @@ class PCBAgent(ABC, Generic[DepsType]):
 
         **Action Types**:
         - analyze: Analyze current situation and plan next steps
-        - execute_tool: Use a specific tool
-        - verify_checkpoint: Verify a checkpoint is complete
+        - execute_tool: Use a specific tool from the list of available tools
+        - verify_checkpoint: Verify a completed checkpoint
         - request_human_input: Ask human for guidance
         - update_context: Update workflow context with new information
         - proceed_to_next: Move to next checkpoint
@@ -110,7 +107,10 @@ class PCBAgent(ABC, Generic[DepsType]):
         return system_prompt
     
     def _register_pydanticai_tools(self) -> None:
-        """TODO: Iterate over the tools and register it with pydanticai agent"""
+        """TODO: Iterate over the tools and register it with pydanticai agent
+        This however bypasses the fine-grained control for AgentActions as the tool
+        execution will be handled in the background before the run result is published.
+        """
         pass
     
     async def run(
@@ -266,18 +266,22 @@ class PCBAgent(ABC, Generic[DepsType]):
             return ActionResult(status="error", error_message=f"Tool definition missing: {action.tool_name}")
         
         # Validate parameters (custom validation logic for every tool)
+        schema_errors: list|None = tool_def.validate_parameter_schema(action.tool_parameters)
+        if schema_errors:
+            return ActionResult(status="error", error_message=f"Tool '{tool_name}' parameters failed schema validation with errors: {schema_errors}")
+        
         parameter_errors: list|None = tool_def.validate_parameters(action.tool_parameters)
         if not parameter_errors:
             try:
                 logger.info(f"Executing tool: {tool_name}")
-                
-                if tool_def.is_async:
-                    tool_result: ToolResult = await tool_func(deps, **action.tool_parameters) #type:ignore
+                if inspect.iscoroutinefunction(tool_func):
+                    tool_result: ToolResult = await tool_func(**action.tool_parameters) #type:ignore
                 else:
-                    tool_result: ToolResult = tool_func(deps, **action.tool_parameters)
+                    tool_result: ToolResult = tool_func(**action.tool_parameters)
                 
                 # Store result
                 self.state.tool_results = tool_result
+                logger.info(f"Executed tool: {tool_name}")
                 
                 return ActionResult(
                     status="tool_executed",
@@ -457,7 +461,7 @@ class PCBAgent(ABC, Generic[DepsType]):
     ) -> tuple[str,str]:
         """LLM based executive summary and recommendations"""
         try:
-            summary_agent: SummaryAgent = SummaryAgent()
+            summary_agent: memory_manager.SummaryAgent = memory_manager.SummaryAgent()
             
             context: str = f"""
             Workflow Summary Context:

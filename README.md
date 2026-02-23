@@ -36,15 +36,16 @@ This project implements a sophisticated agentic framework for automating PCB des
 ## Project Structure
 
 ```
+config/         # Configuration files
 src/
-├── agents/              # Core agent implementation
+├── core/              # Core agent implementation
 │   ├── pcb_agent.py    # Base agent class
 │   ├── tool_registry.py # Tool management
 │   ├── mcp_server_builder.py # MCP integration
 │   ├── memory_manager.py # Memory management
 │   ├── llm_model.py    # LLM configuration
 │   ├── data_models.py  # Pydantic models
-│   └── config/         # Configuration files
+├── agents/             # Subagents
 ├── infrastructure/     # Infrastructure utilities
 ├── orchestrator/       # Workflow orchestration
 ├── protocols/          # Protocol definitions

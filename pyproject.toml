@@ -6,10 +6,14 @@ readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
     "asyncio>=4.0.0",
+    "jsonschema>=4.26.0",
+    "loguru>=0.7.3",
     "matplotlib>=3.10.8",
     "numpy>=2.4.1",
+    "onnxruntime>=1.24.2",
     "pandas>=2.3.3",
     "pydantic-ai>=1.41.0",
     "pydantic-settings>=2.12.0",
+    "pymoo>=0.6.1.6",
     "python-dotenv>=1.2.1",
 ]

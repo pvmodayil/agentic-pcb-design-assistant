@@ -1,10 +1,7 @@
 from typing import Any, Callable
+from loguru import logger
 
 from data_models import ToolDefinition
-import logging
-# Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
 ###########################################
 # Tool Registry (To Register Tools for Agent)
 ###########################################
@@ -39,10 +36,8 @@ class ToolRegistry:
         return list(self._tools.keys())
     
     def get_tool_descriptions(self) -> str:
-        """Get formatted description of all tools"""
+        import json
         descriptions = []
         for name, tool in self._tools.items():
-            descriptions.append(
-                f"- {name}: {tool.description}"
-            )
-        return "\n".join(descriptions)
+            descriptions.append(json.dumps(tool.parameters_schema, indent=2))
+        return "\n\n".join(descriptions)
