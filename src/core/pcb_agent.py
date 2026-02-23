@@ -6,7 +6,7 @@ from datetime import datetime
 from pydantic_ai import Agent, AgentRunResult, ModelSettings, ModelMessage
 from loguru import logger
 
-from llm_model import get_llm_model
+import llm_model
 from settings import load_settings, LLMSettings
 import memory_manager
 from tool_registry import ToolRegistry, ToolFunction
@@ -56,7 +56,7 @@ class PCBAgent(ABC, Generic[DepsType]):
         
         llm_settings: LLMSettings = load_settings(key="llm")
         self.agent = Agent(
-            model=get_llm_model(llm_settings),
+            model=llm_model.get_llm_model(llm_settings),
             model_settings=ModelSettings(temperature=llm_settings.temperature),
             deps_type=deps_type,
             output_type=AgentAction,
