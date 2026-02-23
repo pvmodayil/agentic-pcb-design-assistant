@@ -2,6 +2,7 @@ from typing import TypeVar, Generic, Any
 from abc import ABC, abstractmethod
 import uuid
 from datetime import datetime
+import inspect
 
 from pydantic_ai import Agent, AgentRunResult, ModelSettings, ModelMessage
 from loguru import logger
@@ -262,18 +263,22 @@ class PCBAgent(ABC, Generic[DepsType]):
             return ActionResult(status="error", error_message=f"Tool definition missing: {action.tool_name}")
         
         # Validate parameters (custom validation logic for every tool)
+        schema_errors: list|None = tool_def.validate_parameter_schema(action.tool_parameters)
+        if schema_errors:
+            return ActionResult(status="error", error_message=f"Tool '{tool_name}' parameters failed schema validation with errors: {schema_errors}")
+        
         parameter_errors: list|None = tool_def.validate_parameters(action.tool_parameters)
         if not parameter_errors:
             try:
                 logger.info(f"Executing tool: {tool_name}")
-                
-                if tool_def.is_async:
+                if inspect.iscoroutinefunction(tool_func):
                     tool_result: ToolResult = await tool_func(deps, **action.tool_parameters) #type:ignore
                 else:
                     tool_result: ToolResult = tool_func(deps, **action.tool_parameters)
                 
                 # Store result
                 self.state.tool_results = tool_result
+                logger.info(f"Executed tool: {tool_name}")
                 
                 return ActionResult(
                     status="tool_executed",

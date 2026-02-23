@@ -1,15 +1,17 @@
 from typing import Optional, Literal, Any
 from datetime import datetime
 
+from jsonschema import validate, ValidationError
+
 from enum import IntEnum
 
 from abc import ABC, abstractmethod
 from pydantic import BaseModel, Field, ConfigDict
 from loguru import logger
 
-###########################################
-# Core Data models for Agent and Workflow
-###########################################
+#---------------------------------------------------------
+#                     Agent & Workflow
+#---------------------------------------------------------
 class Checkpoint(BaseModel):
     """A verified checkpoint was reached in the workflow"""
     name: str = Field(..., description="Name of the checkpoint (Unique identifier)")
@@ -32,34 +34,6 @@ class Checkpoint(BaseModel):
         self.timestamp = datetime.now()
         if metadata:
             self.metadata.update(metadata)
-
-class WorkflowState(IntEnum):
-    """Workflow execution states"""
-    # Success states
-    COMPLETED = 200
-    PARTIAL_SUCCESS = 201
-    
-    # Progression states
-    INITIAL = 300
-    ANALYZING = 301
-    EXECUTING_TOOL = 302
-    AWAITING_TOOL_RESULT = 303
-    TOOL_COMPLETED = 304
-    AWAITING_HUMAN = 305
-    HUMAN_RESPONDED = 306
-    
-    # Testing states
-    TESTING = 400
-    TEST_PASSED = 401
-    TEST_FAILED = 402
-    
-    # Error states
-    ERROR = 500
-    VALIDATION_ERROR = 501
-    TIMEOUT = 502
-    TOOL_ERROR = 503
-    AGENT_ERROR = 504
-    CHECKPOINT_ERROR = 505
 
 class AgentAction(BaseModel):
     """Structured action that the agent can take"""
@@ -85,20 +59,102 @@ class AgentAction(BaseModel):
     reasoning: str = Field(..., description="Why this action is being taken")
     expected_outcome: Optional[str] = Field(default=None)
 
+#---------------------------------------------------------
+#                       Tools
+#---------------------------------------------------------
+class ToolParameter(BaseModel):
+    """Tool parameter definition (JSON Schema compatible)."""
+    name: str
+    type: Literal["number", "string", "boolean", "object", "array"]
+    description: str
+    required: bool = True
+    minimum: Optional[float] = None
+    maximum: Optional[float] = None
+    default: Optional[Any] = None
+    enum: Optional[list[Any]] = None
+    
 class ToolDefinition(ABC,BaseModel):
     """Definition of a tool that can be used by the agent
        Each tool must implement a validate_parameters function     
     """
     name: str = Field(..., description="Unique tool identifier")
     description: str = Field(..., description="What the tool does")
-    parameters_schema: dict[str, Any] = Field(default_factory=dict, description="JSON schema for tool parameters")
+    category: Literal[
+            "io",            # file/db/FS I/O
+            "network",       # HTTP, APIs
+            "retrieval",     # search, RAG, knowledge lookup
+            "calculation",   # math, scoring, analytics
+            "code",          # code execution, linting, generation
+            "monitoring",    # logs, metrics, alerts
+            "orchestration", # scheduling, workflow control
+            "human",         # human-in-the-loop / approvals
+            "system",        # infra, admin operations
+            "other",         # fallback bucket
+        ] = Field(default="other", description="Tool category")
+    parameters: list[ToolParameter] = Field(default_factory=list, description="List of the parameter definitions")
+    returns: dict[str,str] = Field(default_factory=dict, description="field_name: description")
+    
     is_async: bool = Field(default=False, description="Whether tool execution is async")
+    security_level: Literal["standard", "elevated", "admin"] = Field(default="standard", description="Security access level")
     requires_human_approval: bool = Field(default=False)
     can_fail: bool = Field(default=True, description="Whether tool failure is recoverable")
     
+    @property
+    def parameters_schema(self) -> dict[str,Any]:
+        """Gets the JSON schema for the function parameters"""
+        properties: dict[str, Any] = {}
+        required: list[str] = []
+        
+        for param in self.parameters:
+            prop: dict[str, Any] = {
+                "type": param.type,
+                "description": param.description
+            }
+            
+            if param.minimum is not None:
+                prop["minimum"] = param.minimum
+            if param.maximum is not None:
+                prop["maximum"] = param.maximum
+            if param.enum is not None:
+                prop["enum"] = param.enum
+            if param.default is not None:
+                prop["default"] = param.default
+            
+            properties[param.name] = prop
+            
+            if param.required:
+                required.append(param.name)
+        
+        return {
+            "name": self.name,
+            "description": self.description,
+            "category": self.category,
+            "parameters": {
+                "type": "object",
+                "properties": properties,
+                "required": required
+            },
+            "returns": self.returns
+        }
+    
+    def validate_parameter_schema(self, parameters: dict[str,Any]) -> Optional[list[str]]:
+        """Validate the paramter schema for this tool return None if valid"""    
+        schema = self.parameters_schema["parameters"]  # {"type": "object", "properties": {...}}
+        
+        try:
+            validate(instance=parameters, schema=schema)
+            return None
+        except ValidationError as e:
+            # Extract all validation errors
+            errors = []
+            error = e
+            while error:
+                errors.append(error.message)
+                error = getattr(error, 'context', None)
+            return errors       
     @abstractmethod
     def validate_parameters(self, parameters: dict[str,Any]) -> Optional[list[str]]:
-        """Validate the paramters for this tool (schema and rules) return None if valid"""
+        """Validate the paramters for this tool (custom rules) return None if valid"""
         pass
 
 class ToolResult(BaseModel):
@@ -109,7 +165,10 @@ class ToolResult(BaseModel):
     error_message: Optional[str] = Field(default=None)
     execution_time: float = Field(default=0.0, description="Execution time in seconds")
     metadata: dict[str, Any] = Field(default_factory=dict)
-   
+
+#---------------------------------------------------------
+#                       Results
+#---------------------------------------------------------   
 class WorkflowResult(BaseModel):
     """Final result of workflow execution"""
     success: bool
@@ -143,6 +202,37 @@ class ActionResult(BaseModel):
     error_message: Optional[str] = Field(default=None, description="Error message")
     message: Optional[str] = Field(default=None, description="Message")
 
+#---------------------------------------------------------
+#                       State
+#---------------------------------------------------------
+class WorkflowState(IntEnum):
+    """Workflow execution states"""
+    # Success states
+    COMPLETED = 200
+    PARTIAL_SUCCESS = 201
+    
+    # Progression states
+    INITIAL = 300
+    ANALYZING = 301
+    EXECUTING_TOOL = 302
+    AWAITING_TOOL_RESULT = 303
+    TOOL_COMPLETED = 304
+    AWAITING_HUMAN = 305
+    HUMAN_RESPONDED = 306
+    
+    # Testing states
+    TESTING = 400
+    TEST_PASSED = 401
+    TEST_FAILED = 402
+    
+    # Error states
+    ERROR = 500
+    VALIDATION_ERROR = 501
+    TIMEOUT = 502
+    TOOL_ERROR = 503
+    AGENT_ERROR = 504
+    CHECKPOINT_ERROR = 505
+    
 class AgentState(BaseModel):
     """Tracks the current state of agent execution"""
     model_config = ConfigDict(arbitrary_types_allowed=True)
@@ -176,6 +266,9 @@ class AgentState(BaseModel):
         self.retry_count += 1
         logger.warning(f"Retry count incremented to {self.retry_count}/{self.max_retries}")
 
+#---------------------------------------------------------
+#                       Summary
+#---------------------------------------------------------
 class Summary(BaseModel):
     summary: str = Field(...,description="Entire workflow summary")
     recommendation: str = Field(..., description="Recommendations for the designer")
