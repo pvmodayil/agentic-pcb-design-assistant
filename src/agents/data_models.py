@@ -5,11 +5,7 @@ from enum import IntEnum
 
 from abc import ABC, abstractmethod
 from pydantic import BaseModel, Field, ConfigDict
-
-import logging
-# Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
+from loguru import logger
 
 ###########################################
 # Core Data models for Agent and Workflow

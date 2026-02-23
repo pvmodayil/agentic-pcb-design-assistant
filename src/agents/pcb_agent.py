@@ -4,17 +4,13 @@ import uuid
 from datetime import datetime
 
 from pydantic_ai import Agent, AgentRunResult, ModelSettings, ModelMessage
+from loguru import logger
 
 from llm_model import get_llm_model
 from settings import load_settings, LLMSettings
 import memory_manager
 from tool_registry import ToolRegistry, ToolFunction
 from data_models import AgentState, Checkpoint, AgentAction, WorkflowResult, WorkflowState, ToolResult, ToolDefinition, ActionResult
-
-import logging
-# Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
         
             
 ###########################################

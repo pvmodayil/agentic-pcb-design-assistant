@@ -1,10 +1,7 @@
 from typing import Any, Callable
+from loguru import logger
 
 from data_models import ToolDefinition
-import logging
-# Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
 ###########################################
 # Tool Registry (To Register Tools for Agent)
 ###########################################
