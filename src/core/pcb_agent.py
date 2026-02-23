@@ -14,9 +14,9 @@ from tool_registry import ToolRegistry, ToolFunction
 from data_models import AgentState, Checkpoint, AgentAction, WorkflowResult, WorkflowState, ToolResult, ToolDefinition, ActionResult
         
             
-###########################################
+#------------------------------------------
 # PCB Agent (Abstract agent class)
-###########################################
+#------------------------------------------
 DepsType = TypeVar("DepsType")
 
 class PCBAgent(ABC, Generic[DepsType]):

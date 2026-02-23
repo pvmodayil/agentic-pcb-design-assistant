@@ -2,9 +2,9 @@ from typing import Any, Callable
 from loguru import logger
 
 from data_models import ToolDefinition
-###########################################
+#--------------------------------------------
 # Tool Registry (To Register Tools for Agent)
-###########################################
+#--------------------------------------------
 
 ToolFunction = Callable[..., Any]
 

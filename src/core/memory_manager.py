@@ -3,9 +3,9 @@ from settings import load_settings
 
 from pydantic_ai import Agent, ModelSettings, ModelMessage, AgentRunResult
 from data_models import Summary
-###########################################
+#------------------------------------------
 # Memory Agent (Think about this more)
-###########################################
+#------------------------------------------
 class MemoryManager:
     """Memory management agent for relevant context generation"""
     def __init__(self, agent_type: str) -> None:
