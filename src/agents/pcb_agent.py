@@ -6,10 +6,10 @@ from datetime import datetime
 from pydantic_ai import Agent, AgentRunResult, ModelSettings, ModelMessage
 
 from llm_model import get_llm_model
-from config.settings import load_settings, LLMSettings
-from memory_manager import MemoryManager, SummaryAgent
+from settings import load_settings, LLMSettings
+import memory_manager
 from tool_registry import ToolRegistry, ToolFunction
-from data_models import AgentState, Checkpoint, AgentAction, WorkflowResult, WorkflowState, ToolResult, ToolDefinition,ActionResult
+from data_models import AgentState, Checkpoint, AgentAction, WorkflowResult, WorkflowState, ToolResult, ToolDefinition, ActionResult
 
 import logging
 # Configure logging
@@ -71,7 +71,7 @@ class PCBAgent(ABC, Generic[DepsType]):
         self._register_pydanticai_tools()
         
         # Memory manager
-        self.memory = MemoryManager(agent_type=agent_type)
+        self.memory = memory_manager.MemoryManager(agent_type=agent_type)
         
     def _build_system_prompt(self) -> str:
         """Basic wrapper for the agent specific system prompt"""
@@ -457,7 +457,7 @@ class PCBAgent(ABC, Generic[DepsType]):
     ) -> tuple[str,str]:
         """LLM based executive summary and recommendations"""
         try:
-            summary_agent: SummaryAgent = SummaryAgent()
+            summary_agent: memory_manager.SummaryAgent = memory_manager.SummaryAgent()
             
             context: str = f"""
             Workflow Summary Context:

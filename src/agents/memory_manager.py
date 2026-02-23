@@ -1,5 +1,5 @@
 from llm_model import get_llm_model
-from config.settings import load_settings
+from settings import load_settings
 
 from pydantic_ai import Agent, ModelSettings, ModelMessage, AgentRunResult
 from data_models import Summary
