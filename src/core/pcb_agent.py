@@ -428,11 +428,11 @@ class PCBAgent(ABC, Generic[DepsType]):
         success: bool
     ) -> WorkflowResult:
         """Generate final workflow result"""
-        completed = [
+        completed: list[Checkpoint] = [
             cp for cp in self.checkpoint_objects.values() 
             if cp.status == "completed"
         ]
-        failed = [
+        failed: list[Checkpoint] = [
             cp for cp in self.checkpoint_objects.values() 
             if cp.status == "failed"
         ]
