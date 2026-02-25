@@ -84,6 +84,7 @@ class ToolDefinition(ABC,BaseModel):
             "network",       # HTTP, APIs
             "retrieval",     # search, RAG, knowledge lookup
             "calculation",   # math, scoring, analytics
+            "simulation",    # simulation tools   
             "code",          # code execution, linting, generation
             "monitoring",    # logs, metrics, alerts
             "orchestration", # scheduling, workflow control
@@ -193,7 +194,7 @@ class ActionResult(BaseModel):
         "context_updated",
         "tool_executed",
         "checkpoint_verified",
-        "human_input_requested",
+        "human_input_received",
         "workflow_completed",
         "retry_required",
         "verification_failed",
