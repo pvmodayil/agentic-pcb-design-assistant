@@ -4,6 +4,8 @@ import yaml
 from pathlib import Path
 from typing import TypedDict
 
+PROJECT_ROOT: Path = Path(__file__).resolve().parents[3]  # Up 3 levels: core -> src -> root
+
 class LLMConfigDict(TypedDict):
     model_name: str
     base_url: str
@@ -19,7 +21,7 @@ def load_settings(key: str) -> LLMSettings:
     """Load YAML config file and initialise LLM model settings"""
     
     # Navigate from src/agents/ to project root, then to config/
-    config_path: Path = Path(__file__).parent.parent.parent / "config" / "llm_config.yaml"
+    config_path: Path = PROJECT_ROOT / "config" / "llm_config.yaml"
     
     if not config_path.exists():
         return LLMSettings() #type:ignore
