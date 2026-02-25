@@ -3,8 +3,16 @@ from abc import ABC, abstractmethod
 import uuid
 from datetime import datetime
 import inspect
+import json 
 
-from pydantic_ai import Agent, AgentRunResult, ModelSettings, ModelMessage
+from pydantic_ai import Agent, AgentRunResult, ModelSettings
+from pydantic_ai.messages import (ModelMessage, 
+                                  ModelResponse, 
+                                  ToolCallPart, 
+                                  ModelRequest, 
+                                  ToolReturnPart,
+                                  UserPromptPart, 
+                                  TextPart)
 from loguru import logger
 
 import llm_model
@@ -65,7 +73,7 @@ class PCBAgent(ABC, Generic[DepsType]):
         )
         
         # Register tools with pydanticai
-        self._register_pydanticai_tools()
+        # self._register_pydanticai_tools()
         
         # Memory manager
         self.memory = memory_manager.MemoryManager(agent_type=agent_type)
@@ -113,6 +121,9 @@ class PCBAgent(ABC, Generic[DepsType]):
         """
         pass
     
+    #--------------------------
+    # Run
+    #--------------------------
     async def run(
         self, 
         initial_query: str,
@@ -130,7 +141,7 @@ class PCBAgent(ABC, Generic[DepsType]):
         logger.info(f"Starting workflow session {session_id}")
         logger.info(f"Initial query: {initial_query}")
         
-        current_query = self._get_state_info() + initial_query 
+        current_query = self._get_workflow_state_info() + initial_query 
         step_count = 0
         
         try:
@@ -169,14 +180,9 @@ class PCBAgent(ABC, Generic[DepsType]):
                 
                 # Update state based on result
                 self._update_state_from_action_result(action_result)
-                
+                    
                 # Prepare next query
-                current_query: str = self._get_state_info() + self._prepare_next_query(action, action_result)
-                
-                # Check if human input needed
-                if self.state.needs_human_input:
-                    # TODO: Handle this in real system (have to integrate with the chat system) 
-                    logger.warning("Human input required - workflow paused")
+                current_query: str = self._get_workflow_state_info() + self._prepare_next_query(action_result)
             
             # Generate final result
             end_time: datetime = datetime.now()
@@ -201,15 +207,71 @@ class PCBAgent(ABC, Generic[DepsType]):
                 success=False
             )
     
-    def _get_state_info(self) -> str:
+    #--------------------------
+    # Next steps
+    #--------------------------
+    def _prepare_next_query(self, action_result: ActionResult) -> str:
+        """Prepare the query for the next agent iteration"""
+        status = action_result.status
+        
+        if status == "tool_executed":
+            return "Tool executed successfully. Proceed to next steps"
+        
+        elif status == "checkpoint_verified":
+            return f"Checkpoint {action_result.checkpoint} verified. Plan and proceed to the next checkpoint."
+        
+        elif status == "verification_failed":
+            return f"Checkpoint {action_result.checkpoint} verification failed. Please analyze for fixes and retry."
+        
+        elif status == "error":
+            self.memory.add_to_message_history(
+                    self._build_error_messages(action_result)
+                    )
+            return f"Error occurred: {action_result.error_message}. Address this error and retry?"
+        
+        elif status == "human_input_requested":
+            return "Based on the response from the user proceed to next steps."
+        else:
+            return "Continue with the workflow based on current state."
+        
+    #--------------------------
+    # State Management
+    #--------------------------
+    def _get_workflow_state_info(self) -> str:
         return f"""
-        **Current State**:
+        **Current Workflow State**:
         - Current checkpoint: {self.state.current_checkpoint or "Not started"}
         - Completed: {', '.join(self.state.completed_checkpoints) or "None"}
         - Pending: {', '.join(self.state.pending_checkpoints)}
         \n           
         """
+    def _update_state_from_action_result(
+        self, 
+        action_result: ActionResult
+    ) -> None:
+        """Update agent state based on action result"""
+        status = action_result.status
         
+        if status == "error":
+            self.state.errors.append(action_result.error_message if action_result.error_message else "No error message was provided")
+            self.state.workflow_state = WorkflowState.ERROR
+        
+        elif status == "verification_failed":
+            self.state.workflow_state = WorkflowState.TEST_FAILED
+        
+        elif status == "checkpoint_verified":
+            self.state.workflow_state = WorkflowState.TEST_PASSED
+        
+        elif status == "human_input_requested":
+            self.state.needs_human_input = True
+            self.state.workflow_state = WorkflowState.AWAITING_HUMAN
+        
+        elif status == "workflow_completed":
+            self.state.workflow_state = WorkflowState.COMPLETED
+    
+    #--------------------------
+    # Action Handling
+    #--------------------------    
     def _execute_action(
         self, 
         action: AgentAction, 
@@ -294,6 +356,44 @@ class PCBAgent(ABC, Generic[DepsType]):
         else:
             return ActionResult(status="error", error_message=f"Tool '{tool_name}' parameters failed validation with errors: {parameter_errors}")
     
+    def _build_tool_return_message(self, action: AgentAction, tool_result: ToolResult) -> list[ModelMessage]:
+        """Construct a synthetic ToolCallPart and ToolReturnPart message pair in pydanticAI native message format"""
+        tool_call_id: str = f"{tool_result.tool_name}_{id(tool_result)}"  # stable fake ID
+
+        # The result returned to the LLM
+        result_payload: str = json.dumps(
+            tool_result.result_data if tool_result.success else {"error": tool_result.error_message},
+            default=str,            # handles datetime, Decimal, etc.
+        )
+        tool_return_msg = ModelRequest(
+            parts=[
+                ToolReturnPart(
+                    tool_name=tool_result.tool_name,
+                    content=result_payload,         # must be a string
+                    tool_call_id=tool_call_id,      # must match the call above
+                )
+            ]
+        )
+
+        return [tool_return_msg]
+    
+    def _build_error_messages(self, action_result: ActionResult) -> list[ModelMessage]:
+        """
+        Injects action error-report so the agent
+        understands what it tried and why it failed.
+        """
+        action_error_message = ModelRequest(
+                parts=[UserPromptPart(
+                    content=f"[ACTION ERROR] {action_result.error_message or 'Unknown error'}. "
+                            f"Please adjust your approach and retry."
+                )]
+            )
+        
+        return [action_error_message]
+    
+    #--------------------------
+    # Verification
+    #--------------------------    
     def _verify_checkpoint_action(
         self, 
         action: AgentAction, 
@@ -329,7 +429,10 @@ class PCBAgent(ABC, Generic[DepsType]):
         self.state.human_question = action.question_for_human
         self.state.workflow_state = WorkflowState.AWAITING_HUMAN
         
-        return ActionResult(status="human_input_requested", message=action.question_for_human)
+        question: str = action.question_for_human if action.question_for_human else "Failed to generate question. Prompt the agent for its query"
+        human_response: str = self.provide_human_input(question=question)
+        
+        return ActionResult(status="human_input_received", message=human_response)
     
     def _update_context_action(self, action: AgentAction) -> ActionResult:
         """Update workflow context"""
@@ -375,52 +478,9 @@ class PCBAgent(ABC, Generic[DepsType]):
         }
         return self.state.workflow_state in terminal_states
     
-    def _update_state_from_action_result(
-        self, 
-        result: ActionResult
-    ) -> None:
-        """Update agent state based on action result"""
-        status = result.status
-        
-        if status == "error":
-            self.state.errors.append(result.error_message if result.error_message else "No error message")
-            self.state.workflow_state = WorkflowState.ERROR
-        
-        elif status == "verification_failed":
-            self.state.workflow_state = WorkflowState.TEST_FAILED
-        
-        elif status == "verified":
-            self.state.workflow_state = WorkflowState.TEST_PASSED
-        
-        elif status == "awaiting_human":
-            self.state.workflow_state = WorkflowState.AWAITING_HUMAN
-        
-        elif status == "completed":
-            self.state.workflow_state = WorkflowState.COMPLETED
-    
-    def _prepare_next_query(
-        self, 
-        action: AgentAction, 
-        result: ActionResult
-    ) -> str:
-        """Prepare the query for the next agent iteration"""
-        status = result.status
-        
-        if status == "success" and action.action_type == "execute_tool":
-            return f"Tool {action.tool_name} executed successfully. Result: {result.tool_result}. What should we do next?"
-        
-        elif status == "verified":
-            return f"Checkpoint {result.checkpoint} verified. Proceed to next step."
-        
-        elif status == "verification_failed":
-            return f"Checkpoint {result.checkpoint} verification failed. Please analyze and suggest fixes."
-        
-        elif status == "error":
-            return f"Error occurred: {result.error_message}. Address this error and retry?"
-        
-        else:
-            return "Continue with the workflow based on current state."
-    
+    #--------------------------
+    # Result
+    #--------------------------
     async def _generate_workflow_result(
         self, 
         session_id: str,
@@ -520,13 +580,22 @@ class PCBAgent(ABC, Generic[DepsType]):
         
         return error_messages
     
-    def provide_human_input(self, response: str) -> None:
+    #--------------------------
+    # Incorporate with UI
+    #--------------------------
+    def provide_human_input(self, question: str) -> str:
         """Provide human response and resume workflow"""
-        self.state.human_response = response
+        #TODO: Implement logic to receive human input from UI chnage the code later
+        #self.state.human_response = response
         self.state.needs_human_input = False
         self.state.workflow_state = WorkflowState.HUMAN_RESPONDED
-        logger.info(f"Human input received: {response}...")
+        logger.info("Human input received...")
         
+        return "Human Input"
+    
+    #--------------------------
+    # Agent Specific Functions
+    #--------------------------
     @abstractmethod
     def verify_checkpoint(
         self, 

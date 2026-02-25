@@ -197,7 +197,7 @@ BEM_SIMULATOR_TOOL = BEMSimulatorToolDefinition(
         "even_mode_impedance_ohms": "Even-mode impedance"
     },
     
-    is_async=False,
+    is_async=True,
     security_level="standard",
     requires_human_approval=False,
     can_fail=True

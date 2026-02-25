@@ -194,7 +194,7 @@ class ActionResult(BaseModel):
         "context_updated",
         "tool_executed",
         "checkpoint_verified",
-        "human_input_requested",
+        "human_input_received",
         "workflow_completed",
         "retry_required",
         "verification_failed",
