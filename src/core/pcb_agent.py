@@ -7,12 +7,12 @@ import json
 
 from pydantic_ai import Agent, AgentRunResult, ModelSettings
 from pydantic_ai.messages import (ModelMessage, 
-                                  ModelResponse, 
-                                  ToolCallPart, 
                                   ModelRequest, 
                                   ToolReturnPart,
-                                  UserPromptPart, 
-                                  TextPart)
+                                  UserPromptPart)
+                                #   ModelResponse, 
+                                #   ToolCallPart,  
+                                #   TextPart)
 from loguru import logger
 
 import llm_model
@@ -154,7 +154,7 @@ class PCBAgent(ABC, Generic[DepsType]):
                     break
                 
                 # Get relevant context
-                relevant_message_histoty: list[ModelMessage] = self.memory.get_relevant_message_history(
+                relevant_message_histoty: list[ModelMessage] = self.memory.get_context(
                     query=current_query,
                 )
                 
@@ -188,6 +188,7 @@ class PCBAgent(ABC, Generic[DepsType]):
             end_time: datetime = datetime.now()
             execution_time: float = (end_time - start_time).total_seconds()
             
+            await self.memory.flush() # Wait for pending summarisation tasks
             return await self._generate_workflow_result(
                 session_id,
                 execution_time,
@@ -201,6 +202,7 @@ class PCBAgent(ABC, Generic[DepsType]):
             
             end_time: datetime = datetime.now()
             execution_time: float = (end_time - start_time).total_seconds()
+            await self.memory.flush() # Wait for pending summarisation tasks
             return await self._generate_workflow_result(
                 session_id,
                 execution_time,
@@ -223,6 +225,8 @@ class PCBAgent(ABC, Generic[DepsType]):
             return "Tool executed successfully. But missing tool results. Retry the tool again."
         
         elif status == "checkpoint_verified":
+            if action_result.checkpoint:
+                self.memory.on_checkpoint(checkpoint_label=action_result.checkpoint)
             return f"Checkpoint {action_result.checkpoint} verified. Plan and proceed to the next checkpoint."
         
         elif status == "verification_failed":
@@ -347,7 +351,7 @@ class PCBAgent(ABC, Generic[DepsType]):
                 
                 # Store result
                 self.state.tool_results = tool_result
-                logger.info(f"Executed tool: {tool_name}")
+                logger.success(f"Executed tool: {tool_name}")
                 
                 return ActionResult(
                     status="tool_executed",
@@ -479,7 +483,7 @@ class PCBAgent(ABC, Generic[DepsType]):
         checkpoint: Checkpoint = self.checkpoint_objects[checkpoint_name]
         
         # Call domain-specific verification
-        is_valid = self.verify_checkpoint(checkpoint, deps)
+        is_valid: bool = self.verify_checkpoint(checkpoint, deps)
         
         if is_valid:
             checkpoint.mark_completed()
