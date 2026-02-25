@@ -215,7 +215,12 @@ class PCBAgent(ABC, Generic[DepsType]):
         status = action_result.status
         
         if status == "tool_executed":
-            return "Tool executed successfully. Proceed to next steps"
+            if action_result.tool_result:
+                self.memory.add_to_message_history(
+                        self._build_tool_return_message(action_result.tool_result)
+                        )
+                return "Tool executed successfully. Proceed to next steps"
+            return "Tool executed successfully. But missing tool results. Retry the tool again."
         
         elif status == "checkpoint_verified":
             return f"Checkpoint {action_result.checkpoint} verified. Plan and proceed to the next checkpoint."
@@ -229,7 +234,10 @@ class PCBAgent(ABC, Generic[DepsType]):
                     )
             return f"Error occurred: {action_result.error_message}. Address this error and retry?"
         
-        elif status == "human_input_requested":
+        elif status == "human_input_received":
+            self.memory.add_to_message_history(
+                    self._build_human_input_message(action_result)
+                    )
             return "Based on the response from the user proceed to next steps."
         else:
             return "Continue with the workflow based on current state."
@@ -262,10 +270,6 @@ class PCBAgent(ABC, Generic[DepsType]):
         elif status == "checkpoint_verified":
             self.state.workflow_state = WorkflowState.TEST_PASSED
         
-        elif status == "human_input_requested":
-            self.state.needs_human_input = True
-            self.state.workflow_state = WorkflowState.AWAITING_HUMAN
-        
         elif status == "workflow_completed":
             self.state.workflow_state = WorkflowState.COMPLETED
     
@@ -293,7 +297,7 @@ class PCBAgent(ABC, Generic[DepsType]):
                 return self._update_context_action(action)
             
             elif action.action_type == "proceed_to_next":
-                return self._proceed_to_next_checkpoint()
+                return self._proceed_to_next_checkpoint_action()
             
             elif action.action_type == "retry_checkpoint":
                 return self._retry_checkpoint_action(action)
@@ -356,7 +360,7 @@ class PCBAgent(ABC, Generic[DepsType]):
         else:
             return ActionResult(status="error", error_message=f"Tool '{tool_name}' parameters failed validation with errors: {parameter_errors}")
     
-    def _build_tool_return_message(self, action: AgentAction, tool_result: ToolResult) -> list[ModelMessage]:
+    def _build_tool_return_message(self, tool_result: ToolResult) -> list[ModelMessage]:
         """Construct a synthetic ToolCallPart and ToolReturnPart message pair in pydanticAI native message format"""
         tool_call_id: str = f"{tool_result.tool_name}_{id(tool_result)}"  # stable fake ID
 
@@ -391,38 +395,6 @@ class PCBAgent(ABC, Generic[DepsType]):
         
         return [action_error_message]
     
-    #--------------------------
-    # Verification
-    #--------------------------    
-    def _verify_checkpoint_action(
-        self, 
-        action: AgentAction, 
-        deps: DepsType
-    ) -> ActionResult:
-        """Verify a checkpoint"""
-        checkpoint_name: str | None = action.checkpoint_name
-        if not checkpoint_name:
-            return ActionResult(status="error", error_message="No checkpoint specified")
-        
-        if checkpoint_name not in self.checkpoint_objects.keys():
-            return ActionResult(status="error", error_message=f"Unknown checkpoint: {checkpoint_name}")
-        
-        checkpoint: Checkpoint = self.checkpoint_objects[checkpoint_name]
-        
-        # Call domain-specific verification
-        is_valid = self.verify_checkpoint(checkpoint, deps)
-        
-        if is_valid:
-            checkpoint.mark_completed()
-            self.state.completed_checkpoints.append(checkpoint_name)
-            if checkpoint_name in self.state.pending_checkpoints:
-                self.state.pending_checkpoints.remove(checkpoint_name)
-            
-            return ActionResult(status="checkpoint_verified", checkpoint=checkpoint_name)
-        else:
-            checkpoint.mark_failed("Verification failed")
-            return ActionResult(status="verification_failed", checkpoint=checkpoint_name)
-    
     def _request_human_input_action(self, action: AgentAction) -> ActionResult:
         """Handle human input request"""
         self.state.needs_human_input = True
@@ -434,12 +406,22 @@ class PCBAgent(ABC, Generic[DepsType]):
         
         return ActionResult(status="human_input_received", message=human_response)
     
+    def _build_human_input_message(self, action_result: ActionResult) -> list[ModelMessage]:
+        """Injects human input so the agent knows what the human said"""
+        human_input_message = ModelRequest(
+                parts=[UserPromptPart(
+                    content=f"[HUMAN INPUT] {action_result.message or 'Did not receive input'}. "
+                            f"Please retry."
+                )]
+            )
+        return [human_input_message]
+    
     def _update_context_action(self, action: AgentAction) -> ActionResult:
         """Update workflow context"""
         self.state.context_data.update(action.context_updates)
         return ActionResult(status="context_updated", message=str(action.context_updates))
     
-    def _proceed_to_next_checkpoint(self,) -> ActionResult:
+    def _proceed_to_next_checkpoint_action(self,) -> ActionResult:
         """Move to next checkpoint"""
         if not self.state.pending_checkpoints:
             self.state.workflow_state = WorkflowState.COMPLETED
@@ -477,6 +459,38 @@ class PCBAgent(ABC, Generic[DepsType]):
             WorkflowState.ERROR
         }
         return self.state.workflow_state in terminal_states
+    
+    #--------------------------
+    # Verification
+    #--------------------------    
+    def _verify_checkpoint_action(
+        self, 
+        action: AgentAction, 
+        deps: DepsType
+    ) -> ActionResult:
+        """Verify a checkpoint"""
+        checkpoint_name: str | None = action.checkpoint_name
+        if not checkpoint_name:
+            return ActionResult(status="error", error_message="No checkpoint specified")
+        
+        if checkpoint_name not in self.checkpoint_objects.keys():
+            return ActionResult(status="error", error_message=f"Unknown checkpoint: {checkpoint_name}")
+        
+        checkpoint: Checkpoint = self.checkpoint_objects[checkpoint_name]
+        
+        # Call domain-specific verification
+        is_valid = self.verify_checkpoint(checkpoint, deps)
+        
+        if is_valid:
+            checkpoint.mark_completed()
+            self.state.completed_checkpoints.append(checkpoint_name)
+            if checkpoint_name in self.state.pending_checkpoints:
+                self.state.pending_checkpoints.remove(checkpoint_name)
+            
+            return ActionResult(status="checkpoint_verified", checkpoint=checkpoint_name)
+        else:
+            checkpoint.mark_failed("Verification failed")
+            return ActionResult(status="verification_failed", checkpoint=checkpoint_name)
     
     #--------------------------
     # Result
