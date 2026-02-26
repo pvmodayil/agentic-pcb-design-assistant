@@ -603,13 +603,23 @@ class PCBAgent(ABC, Generic[DepsType]):
     #--------------------------
     def provide_human_input(self, question: str) -> str:
         """Provide human response and resume workflow"""
-        #TODO: Implement logic to receive human input from UI chnage the code later
-        #self.state.human_response = response
-        self.state.needs_human_input = False
-        self.state.workflow_state = WorkflowState.HUMAN_RESPONDED
-        logger.info("Human input received...")
-        
-        return "Human Input"
+        # TODO: Later integrate with UI for more sophisticated input handling
+        try:
+            # Prompt user for input via console
+            response: str = input(f"\n{question}\n> ")
+            
+            # Update state with response
+            self.state.human_response = response
+            self.state.needs_human_input = False
+            self.state.workflow_state = WorkflowState.HUMAN_RESPONDED
+            logger.info(f"Human input received: {response}")
+            
+            return response
+        except Exception as e:
+            logger.error(f"Error getting human input: {e}")
+            self.state.needs_human_input = False
+            self.state.workflow_state = WorkflowState.HUMAN_RESPONDED
+            return ""
     
     #--------------------------
     # Agent Specific Functions
