@@ -16,42 +16,49 @@ optimization:
   convergence_threshold: 3.0  # percent error between optimized BEM-simulated Zdiff vs. Zdiff_target (PRIMARY success criterion)
   model_accuracy_threshold: 3.0  #  percent error between optimized ML result vs. Zdiff_target (SECONDARY criterion)
 
-parameter_bounds:
-  target_zdiff_ohms:
-    min: 50.0
-    max: 200.0
-    required: true
-    description: "Target differential impedance"
-  
+input_parameters:
   trace_width_um:
+    type: "number"
+    description: "Trace width (always optimized)"
+    required: True
     min: 50.0
     max: 500.0
-    required: false
-    description: "Trace width (always optimized)"
-  
+ 
   trace_spacing_um:
+    type: "number"
+    description: "Edge-to-edge spacing"
+    required: True
     min: 50.0
     max: 3000.0
-    required: false
-    description: "Edge-to-edge spacing"
   
   height_um:
-    min: 50.0
-    max: 500.0
-    required: false
+    type: "number"
     description: "Dielectric height"
+    required: True
+    min: 50.0
+    max: 500.0 
   
   thickness_um:
+    type: "number"
+    description: "Copper thickness"
+    required: True
     min: 5.0
     max: 50.0
-    required: false
-    description: "Copper thickness"
-  
+
   dielectric_constant:
+    type: "number"
+    description: "PCB dielectric constant (Er)"
+    required: True
     min: 2.0
     max: 6.0
-    required: false
-    description: "PCB dielectric constant (Er)"
+
+output_parameters:
+  target_zdiff_ohms:
+    type: "number"
+    description: "Target differential impedance"
+    required: True
+    min: 50.0
+    max: 200.0
 
 workflow:
   max_retries: 3
