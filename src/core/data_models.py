@@ -139,12 +139,12 @@ class ToolDefinition(ABC,BaseModel):
             "returns": self.returns
         }
     
-    def validate_parameter_schema(self, parameters: dict[str,Any]) -> Optional[list[str]]:
+    def validate_parameter_schema(self, parameters_from_agent: dict[str,Any]) -> Optional[list[str]]:
         """Validate the paramter schema for this tool return None if valid"""    
         schema = self.parameters_schema["parameters"]  # {"type": "object", "properties": {...}}
         
         try:
-            validate(instance=parameters, schema=schema)
+            validate(instance=parameters_from_agent, schema=schema)
             return None
         except ValidationError as e:
             # Extract all validation errors
@@ -155,7 +155,7 @@ class ToolDefinition(ABC,BaseModel):
                 error = getattr(error, 'context', None)
             return errors       
     @abstractmethod
-    def validate_parameters(self, parameters: dict[str,Any]) -> Optional[list[str]]:
+    def validate_parameters(self, parameters_from_agent: dict[str,Any]) -> Optional[list[str]]:
         """Validate the paramters for this tool (custom rules) return None if valid"""
         pass
 

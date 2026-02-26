@@ -119,10 +119,43 @@ def _extract_results(result_file: Path) -> tuple[float, float]:
 class BEMSimulatorToolDefinition(ToolDefinition):
     """Concrete implementation of ToolDefinition for BEM simulator."""
     
-    def validate_parameters(self, parameters: dict[str, Any]) -> Optional[list[str]]:
+    def validate_parameters(self, parameters_from_agent: dict[str, Any]) -> Optional[list[str]]:
         """Validate BEM simulator parameters. Shall return list of error messages
         if there are any validation errors else None"""
-        pass
+        
+        errors: list[str] = []
+    
+        # Create a mapping of parameter names to their definitions for easier lookup
+        param_definitions: dict[str, ToolParameter] = {param.name: param for param in self.parameters}
+        
+        # Check for missing required parameters
+        for param_def in self.parameters:
+            if param_def.required and param_def.name not in parameters_from_agent:
+                errors.append(f"Missing **Required Parameter**: {param_def.name}")
+        
+        # Check further if all the required parameters exist
+        if not errors:        
+            # Check each provided parameter against its definition
+            for param_name, param_value in parameters_from_agent.items():
+                if param_name not in param_definitions:
+                    errors.append(f"Unknown parameter {param_name}")
+                    continue
+                    
+                param_def: ToolParameter = param_definitions[param_name]
+                
+                # Validate minimum value constraint
+                if param_def.minimum is not None and param_value < param_def.minimum:
+                    errors.append(f"Parameter '{param_name}' value {param_value} is less than minimum allowed value {param_def.minimum}")
+                
+                # Validate maximum value constraint
+                if param_def.maximum is not None and param_value > param_def.maximum:
+                    errors.append(f"Parameter '{param_name}' value {param_value} is greater than maximum allowed value {param_def.maximum}")
+                
+                # Validate enum constraints
+                if param_def.enum is not None and param_value not in param_def.enum:
+                    errors.append(f"Parameter '{param_name}' value '{param_value}' is not in allowed values {param_def.enum}")
+        
+        return errors if errors else None
     
 #------------------------------------------
 # Public API
