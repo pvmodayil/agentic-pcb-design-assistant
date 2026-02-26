@@ -119,8 +119,8 @@ def _extract_results(result_file: Path) -> tuple[float, float]:
 class BEMSimulatorToolDefinition(ToolDefinition):
     """Concrete implementation of ToolDefinition for BEM simulator."""
     
-    def validate_parameters(self, parameters_from_agent: dict[str, Any]) -> Optional[list[str]]:
-        """Validate BEM simulator parameters. Shall return list of error messages
+    def _validate_parameter_bounds(self,parameters_from_agent: dict[str, Any]) -> Optional[list[str]]:
+        """Validate BEM simulator parameter bounds. Shall return list of error messages
         if there are any validation errors else None"""
         
         errors: list[str] = []
@@ -154,6 +154,19 @@ class BEMSimulatorToolDefinition(ToolDefinition):
                 # Validate enum constraints
                 if param_def.enum is not None and param_value not in param_def.enum:
                     errors.append(f"Parameter '{param_name}' value '{param_value}' is not in allowed values {param_def.enum}")
+        
+        return errors if errors else None
+    
+    def validate_parameters(self, parameters_from_agent: dict[str, Any]) -> Optional[list[str]]:
+        """Validate BEM simulator parameters. Shall return list of error messages
+        if there are any validation errors else None"""
+        
+        errors: list[str] = []
+    
+        parameter_bound_errors: list[str] | None = self._validate_parameter_bounds(parameters_from_agent=parameters_from_agent)
+        
+        if parameter_bound_errors:
+            errors.extend(parameter_bound_errors)
         
         return errors if errors else None
     
