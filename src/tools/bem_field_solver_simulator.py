@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any, Optional
 import yaml
 
-from ..core.data_models import ToolParameter, ToolDefinition
+from src.core.data_models import ToolParameter, ToolDefinition
 
 PROJECT_ROOT: Path = Path(__file__).resolve().parents[3]  # Up 3 levels: tools -> src -> root
 
