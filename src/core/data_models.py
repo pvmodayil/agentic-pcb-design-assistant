@@ -84,7 +84,8 @@ class ToolDefinition(ABC,BaseModel):
             "network",       # HTTP, APIs
             "retrieval",     # search, RAG, knowledge lookup
             "calculation",   # math, scoring, analytics
-            "simulation",    # simulation tools   
+            "simulation",    # simulation tools
+            "optimization",  # optimization tools   
             "code",          # code execution, linting, generation
             "monitoring",    # logs, metrics, alerts
             "orchestration", # scheduling, workflow control
