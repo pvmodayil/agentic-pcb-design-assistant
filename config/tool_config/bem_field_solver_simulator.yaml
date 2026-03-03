@@ -1,0 +1,41 @@
+bem:
+  executable: "C:/Program Files (x86)/tnt-1.2.2/bin/bem.exe"
+  template: "bem/ECM#1.xsctn"
+  result_file: "bem/ECM#1.result"
+  timeout: 60
+
+input_parameters:
+  trace_width_um:
+    type: "number"
+    description: "Trace width (always optimized)"
+    required: True
+    min: 50.0
+    max: 500.0
+ 
+  trace_spacing_um:
+    type: "number"
+    description: "Edge-to-edge spacing"
+    required: True
+    min: 50.0
+    max: 3000.0
+  
+  height_um:
+    type: "number"
+    description: "Dielectric height"
+    required: True
+    min: 50.0
+    max: 500.0 
+  
+  thickness_um:
+    type: "number"
+    description: "Copper thickness"
+    required: True
+    min: 5.0
+    max: 50.0
+
+  dielectric_constant:
+    type: "number"
+    description: "PCB dielectric constant (Er)"
+    required: True
+    min: 2.0
+    max: 6.0
