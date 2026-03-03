@@ -275,3 +275,31 @@ class AgentState(BaseModel):
 class Summary(BaseModel):
     summary: str = Field(...,description="Entire workflow summary")
     recommendation: str = Field(..., description="Recommendations for the designer")
+    
+#---------------------------------------------------------
+#                       Sub Agent
+#---------------------------------------------------------
+class PriorityBand(IntEnum):
+    P0 = 1   # Critical / top priority, reserved
+    P1 = 10  # High priority
+    P2 = 100 # Medium priority  
+    P3 = 1000 # Low priority
+    P4 = 10000 # Lowest priority, fallback
+    
+class SubAgentConfig(BaseModel):
+    # Identity
+    id: str = Field(..., description="Unique ID for internal routing, e.g. 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11'.")
+    name: str = Field(..., description="Human readable name.")
+    type: Literal["worker","router","critic"] = Field(..., description="Type of the agent")
+    
+    # Behaviour
+    description: str = Field(..., description="What this agent is for and when to use it.")
+    capabilities: list[str] = Field(
+        default_factory=list,
+        description="Short capability tags, e.g. ['summarization', 'web_search']."
+    )
+    
+    # Orchestration help
+    priority: PriorityBand = Field(default=PriorityBand.P2, description="Lower means more preferred when multiple agents match.")
+    status: Literal["active","disabled","experimental"] = Field(default="experimental", description="Status of the agent")
+    trigger_keywords: list[str] = Field(default_factory=list, description="If query contains these keywords, this agent is a candidate.")

@@ -39,6 +39,7 @@ class PCBAgent(ABC, Generic[DepsType]):
         agent_type: str,
         task: str,
         model: str,
+        temperature: float,
         checkpoints: list[str],
         tool_registry: ToolRegistry,
         deps_type: type[DepsType],
@@ -64,9 +65,10 @@ class PCBAgent(ABC, Generic[DepsType]):
         system_prompt: str = self._build_system_prompt()
         
         llm_settings: LLMSettings = load_settings(key="llm")
-        self.agent = Agent(
+        effective_temperature: float = temperature if temperature is not None else llm_settings.temperature
+        self.agent: Agent[DepsType, AgentAction] = Agent(
             model=llm_model.get_llm_model(llm_settings),
-            model_settings=ModelSettings(temperature=llm_settings.temperature),
+            model_settings=ModelSettings(temperature=effective_temperature),
             deps_type=deps_type,
             output_type=AgentAction,
             system_prompt=system_prompt
