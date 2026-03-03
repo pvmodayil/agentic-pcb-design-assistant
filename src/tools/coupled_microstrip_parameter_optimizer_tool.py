@@ -20,9 +20,9 @@ PROJECT_ROOT: Path = Path(__file__).resolve().parents[3]  # Up 3 levels: tools -
 #------------------------------------------
 # Internal
 #------------------------------------------
-def _load_config(config_path: str = "coupled_microstrip_config.yaml") -> dict[str,Any]:
+def _load_config(config_path: str = "coupled_microstrip_parameter_optimizer.yaml") -> dict[str,Any]:
     """Load and return the the componenets from the config file"""
-    full_config_path: Path = PROJECT_ROOT / "config" / config_path
+    full_config_path: Path = PROJECT_ROOT / "config" / "tool_config" / config_path
     with open(full_config_path, 'r') as f:
         config = yaml.safe_load(f)
     
@@ -38,18 +38,18 @@ def _load_config(config_path: str = "coupled_microstrip_config.yaml") -> dict[st
         'model_accuracy_threshold': config['optimization']['model_accuracy_threshold']
     }
     
-    output_parameters: dict[str, dict[str,Any]] = {
+    input_parameters: dict[str, dict[str,Any]] = {
         param_name: {
             'type': data.get('type', 'object'),
             'description': data.get('description', ''),
             'required': data.get('required', False),
-            'min': data.get('min'),
-            'max': data.get('max'),    
+            'min': data.get('min', None),
+            'max': data.get('max', None),    
         }
-        for param_name, data in config['output_parameters'].items()
+        for param_name, data in config['input_parameters'].items()
     }
     
-    return {'onnx_model_config': onnx_model_config, 'optimization_config': optimization_config, 'output_parameters': output_parameters}
+    return {'onnx_model_config': onnx_model_config, 'optimization_config': optimization_config, 'input_parameters': input_parameters}
 
 def _normalize(x: np.ndarray, norm_min: np.ndarray, norm_max: np.ndarray) -> np.ndarray:
     """Normalize the parameters to [0,1] range"""
@@ -285,6 +285,7 @@ def get_coupled_strip_optimizer_tool_definition() -> CoupledStripOptimizerToolDe
     API to provide the ToolDefinition for the Coupled Strip Optimizer Tool
     """
     
+    config: dict[str, Any] = _load_config()
     COUPLED_STRIP_OPTIMIZER_TOOL = CoupledStripOptimizerToolDefinition(
         name="optimize_coupled_strip_parameters",
         description="""Optimize coupled microstrip geometry for 
@@ -292,52 +293,15 @@ def get_coupled_strip_optimizer_tool_definition() -> CoupledStripOptimizerToolDe
         category= "optimization",
         takes_deps=False,
         parameters=[
-        ToolParameter(
-            name="target_zdiff_ohms",
-            type="number",
-            description="Target differential impedance in Ohms",
-            required=True,
-            minimum=50.0,
-            maximum=200.0
-        ),
-        ToolParameter(
-            name="dielectric_constant",
-            type="number",
-            description="PCB dielectric constant (Er). Leave null to optimize.",
-            required=False,
-            minimum=2.0,
-            maximum=6.0
-        ),
-        ToolParameter(
-            name="height_um",
-            type="number",
-            description="Dielectric height in micrometers. Leave null to optimize.",
-            required=False,
-            minimum=50.0,
-            maximum=500.0
-        ),
-        ToolParameter(
-            name="thickness_um",
-            type="number",
-            description="Copper thickness in micrometers. Leave null to optimize.",
-            required=False,
-            minimum=5.0,
-            maximum=50.0
-        ),
-        ToolParameter(
-            name="trace_spacing_um",
-            type="number",
-            description="Edge-to-edge spacing in micrometers. Leave null to optimize.",
-            required=False,
-            minimum=50.0,
-            maximum=3000.0
-        ),
-        ToolParameter(
-            name="spacing_range_um",
-            type="array",
-            description="Custom spacing range [min, max] in µm. Example: [100, 500] to optimize spacing between 100-500µm.",
-            required=False
-        )
+            ToolParameter(
+                name=param_name,
+                type=data.get('type', 'object'),
+                description=data.get('description', ''),
+                required=data.get('required', False),
+                minimum=data.get('min', None),
+                maximum=data.get('max', None)
+            )
+            for param_name, data in config['input_parameters'].items()
         ],
         
         returns={

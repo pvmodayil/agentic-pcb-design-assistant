@@ -14,9 +14,9 @@ PROJECT_ROOT: Path = Path(__file__).resolve().parents[3]  # Up 3 levels: tools -
 #------------------------------------------
 # Internal
 #------------------------------------------
-def _load_config(config_path: str = "coupled_microstrip_config.yaml") -> dict[str,Any]:
+def _load_config(config_path: str = "bem_field_solver_simulator.yaml") -> dict[str,Any]:
     """Load and return the the componenets from the config file"""
-    full_config_path: Path = PROJECT_ROOT / "config" / config_path
+    full_config_path: Path = PROJECT_ROOT / "config" / "tool_config" /  config_path
     with open(full_config_path, 'r') as f:
         config = yaml.safe_load(f)
     
@@ -34,8 +34,8 @@ def _load_config(config_path: str = "coupled_microstrip_config.yaml") -> dict[st
             'type': data.get('type', 'object'),
             'description': data.get('description', ''),
             'required': data.get('required', False),
-            'min': data.get('min'),
-            'max': data.get('max'),    
+            'min': data.get('min', None),
+            'max': data.get('max', None),    
         }
         for param_name, data in config['input_parameters'].items()
     }
@@ -231,8 +231,8 @@ def get_bem_simulator_tool_definition() -> BEMSimulatorToolDefinition:
                 type=data.get('type', 'object'),
                 description=data.get('description', ''),
                 required=data.get('required', False),
-                minimum=data.get('min'),
-                maximum=data.get('max')
+                minimum=data.get('min', None),
+                maximum=data.get('max', None)
             )
             for param_name, data in config['input_parameters'].items()
         ],
