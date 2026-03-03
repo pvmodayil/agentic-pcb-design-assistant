@@ -1,0 +1,8 @@
+workflow:
+  max_retries: 3
+  state_timeout: 300  # seconds
+  auto_retry_on_non_convergence: false
+
+optimization:
+  convergence_threshold: 3.0  # percent error between optimized BEM-simulated Zdiff vs. Zdiff_target (PRIMARY success criterion)
+  model_accuracy_threshold: 3.0  #  percent error between optimized ML result vs. Zdiff_target (SECONDARY criterion)
