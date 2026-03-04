@@ -40,22 +40,21 @@ class PCBAgent(ABC, Generic[DepsType]):
         task: str,
         model: str,
         temperature: float,
-        checkpoints: list[str],
+        list_checkpoints: list[Checkpoint],
         tool_registry: ToolRegistry,
         deps_type: type[DepsType],
         **agent_kwargs) -> None:
         
         self.agent_type: str = agent_type
         self.task: str = task
-        self.checkpoints: list[str] = checkpoints
         
         # State management
         self.state = AgentState(
-            pending_checkpoints=checkpoints.copy()
+            pending_checkpoints=[checkpoint.name for checkpoint in list_checkpoints]
         )
         self.checkpoint_objects: dict[str, Checkpoint] = {
-            name: Checkpoint(name=name, status="pending")
-            for name in checkpoints
+            checkpoint.name: checkpoint
+            for checkpoint in list_checkpoints
         }
         
         # Tool management
@@ -252,11 +251,24 @@ class PCBAgent(ABC, Generic[DepsType]):
     # State Management
     #--------------------------
     def _get_workflow_state_info(self) -> str:
+        """Get state info regarding checkpoints"""
+        if self.state.current_checkpoint:
+            current_cp_metadata: dict[str, Any] | None = self.checkpoint_objects[self.state.current_checkpoint].metadata
+            metadata_str = "No metadata" if current_cp_metadata is None else json.dumps(current_cp_metadata, indent=2, ensure_ascii=False)
+            return f"""
+            **Current Workflow State**:
+            - Current checkpoint: {self.state.current_checkpoint}
+            - Checkpoint description: {self.checkpoint_objects[self.state.current_checkpoint].description}
+            - Checkpoint metadata: {metadata_str}
+            - Completed checkpoints: {', '.join(self.state.completed_checkpoints) if self.state.completed_checkpoints else "None"}
+            - Pending checkpoints: {', '.join(self.state.pending_checkpoints) if self.state.pending_checkpoints else "None"}
+            """
+    
         return f"""
         **Current Workflow State**:
-        - Current checkpoint: {self.state.current_checkpoint or "Not started"}
-        - Completed: {', '.join(self.state.completed_checkpoints) or "None"}
-        - Pending: {', '.join(self.state.pending_checkpoints)}
+        - Current checkpoint: Not started
+        - Completed checkpoints: {', '.join(self.state.completed_checkpoints) if self.state.completed_checkpoints else "None"}
+        - Pending checkpoints: {', '.join(self.state.pending_checkpoints) if self.state.pending_checkpoints else "None"}
         \n           
         """
     def _update_state_from_action_result(

@@ -15,9 +15,10 @@ from loguru import logger
 class Checkpoint(BaseModel):
     """A verified checkpoint was reached in the workflow"""
     name: str = Field(..., description="Name of the checkpoint (Unique identifier)")
+    description: str = Field(..., description="Description of the checkpoint")
     status: Literal["pending", "in_progress","failed","completed"] = Field(default="pending", description="status of this checkpoint")
     timestamp: datetime = Field(default_factory=datetime.now)
-    metadata: dict[str, Any] = Field(default_factory=dict, description="Additional information")
+    metadata: Optional[dict[str, Any]] = Field(default=None, description="Additional information")
     error_message: Optional[str] = Field(default=None, description="Error message in case of failure")
     
     def mark_completed(self, metadata: Optional[dict[str, Any]] = None) -> None:
@@ -25,7 +26,7 @@ class Checkpoint(BaseModel):
         self.status = "completed"
         self.timestamp = datetime.now()
         if metadata:
-            self.metadata.update(metadata)
+            self.metadata.update(metadata) #type:ignore
     
     def mark_failed(self, error: str, metadata: Optional[dict[str, Any]] = None) -> None:
         """Mark checkpoint as failed"""
@@ -33,7 +34,7 @@ class Checkpoint(BaseModel):
         self.error_message = error
         self.timestamp = datetime.now()
         if metadata:
-            self.metadata.update(metadata)
+            self.metadata.update(metadata) #type:ignore
 
 class AgentAction(BaseModel):
     """Structured action that the agent can take"""
