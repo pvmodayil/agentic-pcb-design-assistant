@@ -341,42 +341,17 @@ class PCBAgent(ABC, Generic[DepsType]):
         else:
             return ActionResult(status="error", error_message="No tool name provided")
         
-        tool_func: ToolFunction|None = self.tool_registry.get_tool_function(tool_name)
-        if not tool_func:
-            return ActionResult(status="error", error_message=f"Unknown tool: {tool_name}")
+        tool_result: ToolResult = self.tool_registry.handle_tool_call(tool_name=tool_name,
+                                                                      tool_parameters=action.tool_parameters)
+        self.state.tool_results = tool_result
         
-        tool_def: ToolDefinition = self.tool_registry.get_tool_definition(tool_name)
-        if not tool_def:
-            return ActionResult(status="error", error_message=f"Tool definition missing: {action.tool_name}")
-        
-        # Validate parameters (custom validation logic for every tool)
-        schema_errors: list|None = tool_def.validate_parameter_schema(action.tool_parameters)
-        if schema_errors:
-            return ActionResult(status="error", error_message=f"Tool '{tool_name}' parameters failed schema validation with errors: {schema_errors}")
-        
-        parameter_errors: list|None = tool_def.validate_parameters(action.tool_parameters)
-        if not parameter_errors:
-            try:
-                logger.info(f"Executing tool: {tool_name}")
-                if inspect.iscoroutinefunction(tool_func):
-                    tool_result: ToolResult = await tool_func(**action.tool_parameters) #type:ignore
-                else:
-                    tool_result: ToolResult = tool_func(**action.tool_parameters)
-                
-                # Store result
-                self.state.tool_results = tool_result
-                logger.success(f"Executed tool: {tool_name}")
-                
-                return ActionResult(
-                    status="tool_executed",
-                    tool_result=tool_result,
-                )
-            
-            except Exception as e:
-                logger.error(f"Tool execution failed: {e}", exc_info=True)
-                return ActionResult(status="error", error_message=f"Tool {tool_name} execution failed: {e}")
+        if tool_result.error_message:
+            return ActionResult(status="error", error_message=tool_result.error_message)
         else:
-            return ActionResult(status="error", error_message=f"Tool '{tool_name}' parameters failed validation with errors: {parameter_errors}")
+            return ActionResult(
+                status="tool_executed",
+                tool_result=tool_result,
+            )
     
     def _build_tool_return_message(self, tool_result: ToolResult) -> list[ModelMessage]:
         """Construct a synthetic ToolCallPart and ToolReturnPart message pair in pydanticAI native message format"""

@@ -167,7 +167,7 @@ class ToolResult(BaseModel):
     success: bool
     result_data: dict[str, Any] = Field(default_factory=dict)
     error_message: Optional[str] = Field(default=None)
-    execution_time: float = Field(default=0.0, description="Execution time in seconds")
+    execution_time: Optional[float] = Field(default=None, description="Execution time in seconds")
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 #---------------------------------------------------------
