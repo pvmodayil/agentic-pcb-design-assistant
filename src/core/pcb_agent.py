@@ -490,9 +490,6 @@ class PCBAgent(ABC, Generic[DepsType]):
         if is_valid:
             checkpoint.mark_completed()
             self.state.completed_checkpoints.append(checkpoint_name)
-            if checkpoint_name in self.state.pending_checkpoints:
-                self.state.pending_checkpoints.remove(checkpoint_name)
-            
             return ActionResult(status="checkpoint_verified", checkpoint=checkpoint_name)
         else:
             checkpoint.mark_failed("Verification failed")
