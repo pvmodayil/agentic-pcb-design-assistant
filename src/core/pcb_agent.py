@@ -1,4 +1,6 @@
 from typing import TypeVar, Generic, Any
+from dataclasses import dataclass
+
 from abc import ABC, abstractmethod
 import uuid
 from datetime import datetime
@@ -25,6 +27,11 @@ from data_models import AgentState, Checkpoint, AgentAction, WorkflowResult, Wor
 # PCB Agent (Abstract agent class)
 #------------------------------------------
 DepsType = TypeVar("DepsType")
+
+@dataclass
+class NoDeps:
+    """Must pass NoDeps if there are no dependencies"""
+    pass
 
 class PCBAgent(ABC, Generic[DepsType]):
     """
