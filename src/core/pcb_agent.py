@@ -2,7 +2,6 @@ from typing import TypeVar, Generic, Any
 from abc import ABC, abstractmethod
 import uuid
 from datetime import datetime
-import inspect
 import json 
 
 from pydantic_ai import Agent, AgentRunResult, ModelSettings
@@ -18,8 +17,8 @@ from loguru import logger
 import llm_model
 from settings import load_settings, LLMSettings
 import memory_manager
-from tool_registry import ToolRegistry, ToolFunction
-from data_models import AgentState, Checkpoint, AgentAction, WorkflowResult, WorkflowState, ToolResult, ToolDefinition, ActionResult
+from tool_registry import ToolRegistry
+from data_models import AgentState, Checkpoint, AgentAction, WorkflowResult, WorkflowState, ToolResult, ActionResult
         
             
 #------------------------------------------
