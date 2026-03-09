@@ -1,4 +1,4 @@
-from typing import TypeVar, Generic, Any
+from typing import TypeVar, Generic, Any, Optional
 from dataclasses import dataclass
 
 from abc import ABC, abstractmethod
@@ -237,6 +237,9 @@ class PCBAgent(ABC, Generic[DepsType]):
             return f"Checkpoint {action_result.checkpoint} verified. Plan and proceed to the next checkpoint."
         
         elif status == "verification_failed":
+            self.memory.add_to_message_history(
+                    self._build_error_messages(action_result)
+                    )
             return f"Checkpoint {action_result.checkpoint} verification failed. Please analyze for fixes and retry."
         
         elif status == "error":
@@ -289,6 +292,7 @@ class PCBAgent(ABC, Generic[DepsType]):
             self.state.workflow_state = WorkflowState.ERROR
         
         elif status == "verification_failed":
+            self.state.errors.append(action_result.error_message if action_result.error_message else "No error message was provided")
             self.state.workflow_state = WorkflowState.TEST_FAILED
         
         elif status == "checkpoint_verified":
@@ -346,6 +350,9 @@ class PCBAgent(ABC, Generic[DepsType]):
             tool_name: str = action.tool_name
         else:
             return ActionResult(status="error", error_message="No tool name provided")
+        
+        if not action.tool_parameters:
+            return ActionResult(status="error", error_message=f"Tool {tool_name} parameters not provided")
         
         tool_result: ToolResult = self.tool_registry.handle_tool_call(tool_name=tool_name,
                                                                       tool_parameters=action.tool_parameters)
@@ -478,15 +485,23 @@ class PCBAgent(ABC, Generic[DepsType]):
         checkpoint: Checkpoint = self.checkpoint_objects[checkpoint_name]
         
         # Call domain-specific verification
-        is_valid: bool = self.verify_checkpoint(checkpoint, deps)
+        if not (action.tool_name == checkpoint.verification_tool_name) and action.tool_name:
+            checkpoint.mark_failed("Verification failed")
+            return ActionResult(status="error", 
+                                checkpoint=checkpoint_name, 
+                                error_message=f"""Given {action.tool_name} is not matching with 
+                                the checkpoint verification tool {checkpoint.verification_tool_name}""")
         
-        if is_valid:
+        action_result: ActionResult = self._execute_tool_action(action, deps)
+        error_messages: Optional[list[str]] = self.verify_checkpoint(checkpoint, action_result, deps)
+        
+        if not error_messages:
             checkpoint.mark_completed()
             self.state.completed_checkpoints.append(checkpoint_name)
             return ActionResult(status="checkpoint_verified", checkpoint=checkpoint_name)
         else:
             checkpoint.mark_failed("Verification failed")
-            return ActionResult(status="verification_failed", checkpoint=checkpoint_name)
+            return ActionResult(status="verification_failed", checkpoint=checkpoint_name, error_message="".join(error_messages))
     
     #--------------------------
     # Result
@@ -620,10 +635,12 @@ class PCBAgent(ABC, Generic[DepsType]):
     def verify_checkpoint(
         self, 
         checkpoint: Checkpoint, 
+        action_result: ActionResult,
         deps: DepsType
-    ) -> bool:
+    ) -> Optional[list[str]]:
         """
         Verify that a checkpoint has been properly completed
+        Return error messages if not verified else None
         
         This should be implemented by domain-specific agents
         """

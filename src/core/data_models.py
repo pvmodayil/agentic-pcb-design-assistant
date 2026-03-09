@@ -17,6 +17,7 @@ class Checkpoint(BaseModel):
     name: str = Field(..., description="Name of the checkpoint (Unique identifier)")
     description: str = Field(..., description="Description of the checkpoint")
     status: Literal["pending", "in_progress","failed","completed"] = Field(default="pending", description="status of this checkpoint")
+    verification_tool_name: Optional[str] = Field(default=None, description="Name of the verification tool")
     timestamp: datetime = Field(default_factory=datetime.now)
     metadata: Optional[dict[str, Any]] = Field(default=None, description="Additional information")
     error_message: Optional[str] = Field(default=None, description="Error message in case of failure")
