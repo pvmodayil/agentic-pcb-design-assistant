@@ -44,11 +44,10 @@ class PCBAgent(ABC, Generic[DepsType]):
         self, 
         agent_type: str,
         task: str,
-        model: str,
-        temperature: float,
         list_checkpoints: list[Checkpoint],
         tool_registry: ToolRegistry,
-        deps_type: type[DepsType],
+        deps_type: type[DepsType] = NoDeps,
+        temperature: Optional[float] = None,
         **agent_kwargs) -> None:
         
         self._agent_type: str = agent_type
@@ -134,7 +133,7 @@ class PCBAgent(ABC, Generic[DepsType]):
     async def run(
         self, 
         initial_query: str,
-        deps: DepsType,
+        deps: DepsType = NoDeps(),
         max_steps: int = 50
     ) -> WorkflowResult:
         """

@@ -11,7 +11,7 @@ from pymoo.core.result import Result
 from pymoo.optimize import minimize
 
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Optional, Callable
 import yaml
 
 from src.core.data_models import ToolParameter, ToolDefinition
@@ -148,9 +148,6 @@ class CoupledStripOptimizerToolDefinition(ToolDefinition):
         
         return errors if errors else None        
 
-#------------------------------------------
-# Public API
-#------------------------------------------
 def optimize_coupled_strip_parameters(
         target_zdiff_ohms: float,
         
@@ -279,8 +276,10 @@ def optimize_coupled_strip_parameters(
         "population_size": pop_size
     }
     
-
-def get_coupled_strip_optimizer_tool_definition() -> CoupledStripOptimizerToolDefinition:
+#------------------------------------------
+# Public API
+#------------------------------------------
+def get_tool_definition() -> CoupledStripOptimizerToolDefinition:
     """
     API to provide the ToolDefinition for the Coupled Strip Optimizer Tool
     """
@@ -319,3 +318,7 @@ def get_coupled_strip_optimizer_tool_definition() -> CoupledStripOptimizerToolDe
     )
     
     return COUPLED_STRIP_OPTIMIZER_TOOL
+
+def get_tool_func() -> Callable:
+    """Return the API for the tool"""
+    return optimize_coupled_strip_parameters

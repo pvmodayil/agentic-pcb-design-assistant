@@ -4,7 +4,7 @@ BEM field solver (MMTL TNT - Mayo Clinic) simulation tool for validation.
 
 import subprocess
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Optional, Callable
 import yaml
 
 from src.core.data_models import ToolParameter, ToolDefinition
@@ -170,9 +170,6 @@ class BEMSimulatorToolDefinition(ToolDefinition):
         
         return errors if errors else None
     
-#------------------------------------------
-# Public API
-#------------------------------------------
 async def simulate_bem(
     trace_width_um: float,
     trace_spacing_um: float,
@@ -214,7 +211,10 @@ async def simulate_bem(
         "simulation_method": "2D BEM Field Solver (MMTL TNT - Mayo Clinic)"
     }
 
-def get_bem_simulator_tool_definition() -> BEMSimulatorToolDefinition:
+#------------------------------------------
+# Public API
+#------------------------------------------
+def get_tool_definition() -> BEMSimulatorToolDefinition:
     """
     API to provide the ToolDefinition for the BEMSimulator Tool
     """
@@ -249,3 +249,7 @@ def get_bem_simulator_tool_definition() -> BEMSimulatorToolDefinition:
     )
     
     return BEM_SIMULATOR_TOOL
+
+def get_tool_func() -> Callable:
+    """Return the API for the tool"""
+    return simulate_bem
