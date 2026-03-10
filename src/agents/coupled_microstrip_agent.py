@@ -69,8 +69,6 @@ class CoupledStripAgent(PCBAgent):
     def verify_checkpoint(self, checkpoint: Checkpoint, action_result: ActionResult, deps: Any) -> Optional[list[str]]:
         error_messages:list[str] = []
         return error_messages
-    def collect_final_results(self) -> dict[str, Any]:
-        return {}
     
 coupled_strip_agent: CoupledStripAgent = CoupledStripAgent(agent_type="Coupled Microstrip Agent",
                                          task="Optimise the geometric parameters of the coupled microstrip strip arrangement",

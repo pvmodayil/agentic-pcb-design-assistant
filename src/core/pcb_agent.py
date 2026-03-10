@@ -20,7 +20,7 @@ import llm_model
 from settings import load_settings, LLMSettings
 import memory_manager
 from tool_registry import ToolRegistry
-from data_models import AgentState, Checkpoint, AgentAction, WorkflowResult, WorkflowState, ToolResult, ActionResult
+from data_models import AgentState, Checkpoint, AgentAction, WorkflowResult, WorkflowState, ToolResult, ActionResult, FinalResults
         
             
 #------------------------------------------
@@ -46,12 +46,14 @@ class PCBAgent(ABC, Generic[DepsType]):
         task: str,
         list_checkpoints: list[Checkpoint],
         tool_registry: ToolRegistry,
+        final_results_type: type[FinalResults] = FinalResults,
         deps_type: type[DepsType] = NoDeps,
         temperature: Optional[float] = None,
         **agent_kwargs) -> None:
         
         self._agent_type: str = agent_type
         self.task: str = task
+        self._final_results_type: type[FinalResults] = final_results_type
         
         # State management
         self.state = AgentState(
@@ -68,10 +70,10 @@ class PCBAgent(ABC, Generic[DepsType]):
         # Create Agent
         system_prompt: str = self._build_system_prompt()
         
-        llm_settings: LLMSettings = load_settings(key="llm")
-        effective_temperature: float = temperature if temperature is not None else llm_settings.temperature
+        self.llm_settings: LLMSettings = load_settings(key="llm")
+        effective_temperature: float = temperature if temperature is not None else self.llm_settings.temperature
         self._agent: Agent[DepsType, AgentAction] = Agent(
-            model=llm_model.get_llm_model(llm_settings),
+            model=llm_model.get_llm_model(self.llm_settings),
             model_settings=ModelSettings(temperature=effective_temperature),
             deps_type=deps_type,
             output_type=AgentAction,
@@ -160,7 +162,7 @@ class PCBAgent(ABC, Generic[DepsType]):
                     break
                 
                 # Get relevant context
-                relevant_message_histoty: list[ModelMessage] = self.memory.get_context(
+                relevant_message_history: list[ModelMessage] = self.memory.get_context(
                     query=current_query,
                 )
                 
@@ -168,7 +170,7 @@ class PCBAgent(ABC, Generic[DepsType]):
                 result: AgentRunResult[AgentAction] = await self._agent.run(
                     current_query,
                     deps=deps,
-                    message_history=relevant_message_histoty
+                    message_history=relevant_message_history
                 )
                 
                 # Update memory
@@ -521,7 +523,7 @@ class PCBAgent(ABC, Generic[DepsType]):
             if cp.status == "failed"
         ]
         
-        summary, recommendations = await self._generate_llm_summary(success, completed, failed)
+        final_result: FinalResults = await self._generate_llm_summary_and_results(success, completed, failed)
         
         return WorkflowResult(
             success=success,
@@ -530,48 +532,54 @@ class PCBAgent(ABC, Generic[DepsType]):
             final_state=self.state.workflow_state,
             completed_checkpoints=completed,
             failed_checkpoints=failed,
-            results=self.collect_final_results(),
-            recommendations=recommendations,
-            summary=summary,
+            results=final_result,
+            recommendations=final_result.recommendations,
+            summary=final_result.design_summary,
             total_execution_time=execution_time,
             errors=self.state.errors
         )
         
-    async def _generate_llm_summary(
+    async def _generate_llm_summary_and_results(
         self, 
         success: bool, 
         completed: list[Checkpoint],
         failed: list[Checkpoint]
-    ) -> tuple[str,str]:
+    ) -> FinalResults:
         """LLM based executive summary and recommendations"""
-        try:
-            summary_agent: memory_manager.SummaryAgent = memory_manager.SummaryAgent()
-            
-            context: str = f"""
-            Workflow Summary Context:
-            - Workflow Type: {self._agent_type}
-            - Success Status: {success}
-            - Total Checkpoints: {len(self.checkpoint_objects)}
-            - Completed Checkpoints: {len(completed)}
-            - Failed Checkpoints: {len(failed)}
-            
-            Completed Checkpoints:
-            {[cp.name for cp in completed]}
-            
-            Failed Checkpoints:
-            {[cp.name for cp in failed]}
-            
-            Error Messages:
-            {self._get_error_messages(success, failed)}
-            """
-            summary, recommendations = await summary_agent.generate_summary(context=context)
-            
-            return summary, recommendations
-        except Exception as e:
-            logger.error(f"LLM recommendations generation failed: {e}")
-            summary, recommendations = self._generate_basic_summary(success, completed, failed)
-            
-            return summary, recommendations
+        query: str = f"""
+        Workflow Summary Context:
+        - Workflow Type: {self._agent_type}
+        - Success Status: {success}
+        - Total Checkpoints: {len(self.checkpoint_objects)}
+        - Completed Checkpoints: {len(completed)}
+        - Failed Checkpoints: {len(failed)}
+        
+        Completed Checkpoints:
+        {[cp.name for cp in completed]}
+        
+        Failed Checkpoints:
+        {[cp.name for cp in failed]}
+        
+        Error Messages:
+        {self._get_error_messages(success, failed)}
+        
+        Generate the final results.
+        """
+        
+        effective_temperature: float = self.llm_settings.temperature
+        _result_agent: Agent[None, FinalResults] = Agent(
+            model=llm_model.get_llm_model(self.llm_settings),
+            model_settings=ModelSettings(temperature=effective_temperature),
+            output_type=self._final_results_type,
+            instructions="Based on the workflow execution, please generate the final results following the required structure."
+        )
+        relevant_message_history: list[ModelMessage] = self.memory.get_context(
+                query="Generate the final results",
+            )
+        final_result: AgentRunResult[FinalResults] = await _result_agent.run(user_prompt=query,
+                                                                            message_history=relevant_message_history)
+        
+        return final_result.output
         
     def _generate_basic_summary(
         self, 
@@ -642,18 +650,5 @@ class PCBAgent(ABC, Generic[DepsType]):
         Return error messages if not verified else None
         
         This should be implemented by domain-specific agents
-        """
-        pass
-    
-    @abstractmethod
-    def collect_final_results(self) -> dict[str,Any]:
-        """
-        Collect final workflow-specific results.
-        This should be implemented by domain-specific agents.
-
-        Returns
-        -------
-        dict[str,Any]
-            Final results of the workflow
         """
         pass

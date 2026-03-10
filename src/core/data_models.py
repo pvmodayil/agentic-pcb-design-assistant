@@ -174,6 +174,20 @@ class ToolResult(BaseModel):
 #---------------------------------------------------------
 #                       Results
 #---------------------------------------------------------   
+class FinalResults(BaseModel):
+    """
+    Base class for final results that users can extend.
+    This structure will be used by the LLM to generate final results.
+    """
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+    # Common fields that might be useful for all workflows
+    design_requirements: Optional[dict[str, Any]] = Field(default=None, description="Final design requirements")
+    optimization_results: Optional[dict[str, Any]] = Field(default=None, description="Optimization outcomes")
+    performance_metrics: Optional[dict[str, Any]] = Field(default=None, description="Performance measurements")
+    component_selections: Optional[dict[str, Any]] = Field(default=None, description="Component choices made")
+    design_summary: Optional[str] = Field(default=None, description="Summary of final design")
+    recommendations: Optional[str] = Field(default=None, description="Recommendations for next steps")
+    
 class WorkflowResult(BaseModel):
     """Final result of workflow execution"""
     success: bool
@@ -184,9 +198,9 @@ class WorkflowResult(BaseModel):
     completed_checkpoints: list[Checkpoint]
     failed_checkpoints: list[Checkpoint]
     
-    results: dict[str, Any] = Field(default_factory=dict)
+    results: FinalResults = Field(..., description="Final results parameters")
     recommendations: str|None = Field(default=None, description="Recommendations from the agent")
-    summary: str = Field(..., description="Executive summary")
+    summary: Optional[str] = Field(..., description="Executive summary")
     
     total_execution_time: float = Field(default=0.0)
     errors: list[str] = Field(default_factory=list)
