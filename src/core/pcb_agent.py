@@ -51,7 +51,7 @@ class PCBAgent(ABC, Generic[DepsType]):
         deps_type: type[DepsType],
         **agent_kwargs) -> None:
         
-        self.agent_type: str = agent_type
+        self._agent_type: str = agent_type
         self.task: str = task
         
         # State management
@@ -71,7 +71,7 @@ class PCBAgent(ABC, Generic[DepsType]):
         
         llm_settings: LLMSettings = load_settings(key="llm")
         effective_temperature: float = temperature if temperature is not None else llm_settings.temperature
-        self.agent: Agent[DepsType, AgentAction] = Agent(
+        self._agent: Agent[DepsType, AgentAction] = Agent(
             model=llm_model.get_llm_model(llm_settings),
             model_settings=ModelSettings(temperature=effective_temperature),
             deps_type=deps_type,
@@ -91,7 +91,7 @@ class PCBAgent(ABC, Generic[DepsType]):
         tool_descriptions: str = self.tool_registry.get_tool_descriptions()
         
         system_prompt: str = f"""
-        You are an expert '{self.agent_type}' agent engaged in the PCB design workflow with the given task/goal.
+        You are an expert '{self._agent_type}' agent engaged in the PCB design workflow with the given task/goal.
         
         **Task**: {self.task}
         
@@ -166,7 +166,7 @@ class PCBAgent(ABC, Generic[DepsType]):
                 )
                 
                 # Run agent to get next action
-                result: AgentRunResult[AgentAction] = await self.agent.run(
+                result: AgentRunResult[AgentAction] = await self._agent.run(
                     current_query,
                     deps=deps,
                     message_history=relevant_message_histoty
@@ -527,7 +527,7 @@ class PCBAgent(ABC, Generic[DepsType]):
         return WorkflowResult(
             success=success,
             session_id=session_id,
-            workflow_type=self.agent_type,
+            workflow_type=self._agent_type,
             final_state=self.state.workflow_state,
             completed_checkpoints=completed,
             failed_checkpoints=failed,
@@ -550,7 +550,7 @@ class PCBAgent(ABC, Generic[DepsType]):
             
             context: str = f"""
             Workflow Summary Context:
-            - Workflow Type: {self.agent_type}
+            - Workflow Type: {self._agent_type}
             - Success Status: {success}
             - Total Checkpoints: {len(self.checkpoint_objects)}
             - Completed Checkpoints: {len(completed)}
