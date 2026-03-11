@@ -1,8 +1,9 @@
-from typing import TypeVar, Generic, Any
+from typing import TypeVar, Generic, Any, Optional
+from dataclasses import dataclass
+
 from abc import ABC, abstractmethod
 import uuid
 from datetime import datetime
-import inspect
 import json 
 
 from pydantic_ai import Agent, AgentRunResult, ModelSettings
@@ -18,14 +19,19 @@ from loguru import logger
 import llm_model
 from settings import load_settings, LLMSettings
 import memory_manager
-from tool_registry import ToolRegistry, ToolFunction
-from data_models import AgentState, Checkpoint, AgentAction, WorkflowResult, WorkflowState, ToolResult, ToolDefinition, ActionResult
+from tool_registry import ToolRegistry
+from data_models import AgentState, Checkpoint, AgentAction, WorkflowResult, WorkflowState, ToolResult, ActionResult, FinalResults
         
             
 #------------------------------------------
 # PCB Agent (Abstract agent class)
 #------------------------------------------
 DepsType = TypeVar("DepsType")
+
+@dataclass
+class NoDeps:
+    """Must pass NoDeps if there are no dependencies"""
+    pass
 
 class PCBAgent(ABC, Generic[DepsType]):
     """
@@ -38,23 +44,24 @@ class PCBAgent(ABC, Generic[DepsType]):
         self, 
         agent_type: str,
         task: str,
-        model: str,
-        checkpoints: list[str],
+        list_checkpoints: list[Checkpoint],
         tool_registry: ToolRegistry,
-        deps_type: type[DepsType],
+        final_results_type: type[FinalResults] = FinalResults,
+        deps_type: type[DepsType] = NoDeps,
+        temperature: Optional[float] = None,
         **agent_kwargs) -> None:
         
-        self.agent_type: str = agent_type
+        self._agent_type: str = agent_type
         self.task: str = task
-        self.checkpoints: list[str] = checkpoints
+        self._final_results_type: type[FinalResults] = final_results_type
         
         # State management
         self.state = AgentState(
-            pending_checkpoints=checkpoints.copy()
+            pending_checkpoints=[checkpoint.name for checkpoint in list_checkpoints]
         )
         self.checkpoint_objects: dict[str, Checkpoint] = {
-            name: Checkpoint(name=name, status="pending")
-            for name in checkpoints
+            checkpoint.name: checkpoint
+            for checkpoint in list_checkpoints
         }
         
         # Tool management
@@ -63,10 +70,11 @@ class PCBAgent(ABC, Generic[DepsType]):
         # Create Agent
         system_prompt: str = self._build_system_prompt()
         
-        llm_settings: LLMSettings = load_settings(key="llm")
-        self.agent = Agent(
-            model=llm_model.get_llm_model(llm_settings),
-            model_settings=ModelSettings(temperature=llm_settings.temperature),
+        self.llm_settings: LLMSettings = load_settings(key="llm")
+        effective_temperature: float = temperature if temperature is not None else self.llm_settings.temperature
+        self._agent: Agent[DepsType, AgentAction] = Agent(
+            model=llm_model.get_llm_model(self.llm_settings),
+            model_settings=ModelSettings(temperature=effective_temperature),
             deps_type=deps_type,
             output_type=AgentAction,
             system_prompt=system_prompt
@@ -84,7 +92,7 @@ class PCBAgent(ABC, Generic[DepsType]):
         tool_descriptions: str = self.tool_registry.get_tool_descriptions()
         
         system_prompt: str = f"""
-        You are an expert '{self.agent_type}' agent engaged in the PCB design workflow with the given task/goal.
+        You are an expert '{self._agent_type}' agent engaged in the PCB design workflow with the given task/goal.
         
         **Task**: {self.task}
         
@@ -127,7 +135,7 @@ class PCBAgent(ABC, Generic[DepsType]):
     async def run(
         self, 
         initial_query: str,
-        deps: DepsType,
+        deps: DepsType = NoDeps(),
         max_steps: int = 50
     ) -> WorkflowResult:
         """
@@ -154,15 +162,15 @@ class PCBAgent(ABC, Generic[DepsType]):
                     break
                 
                 # Get relevant context
-                relevant_message_histoty: list[ModelMessage] = self.memory.get_context(
+                relevant_message_history: list[ModelMessage] = self.memory.get_context(
                     query=current_query,
                 )
                 
                 # Run agent to get next action
-                result: AgentRunResult[AgentAction] = await self.agent.run(
+                result: AgentRunResult[AgentAction] = await self._agent.run(
                     current_query,
                     deps=deps,
-                    message_history=relevant_message_histoty
+                    message_history=relevant_message_history
                 )
                 
                 # Update memory
@@ -230,6 +238,9 @@ class PCBAgent(ABC, Generic[DepsType]):
             return f"Checkpoint {action_result.checkpoint} verified. Plan and proceed to the next checkpoint."
         
         elif status == "verification_failed":
+            self.memory.add_to_message_history(
+                    self._build_error_messages(action_result)
+                    )
             return f"Checkpoint {action_result.checkpoint} verification failed. Please analyze for fixes and retry."
         
         elif status == "error":
@@ -250,11 +261,24 @@ class PCBAgent(ABC, Generic[DepsType]):
     # State Management
     #--------------------------
     def _get_workflow_state_info(self) -> str:
+        """Get state info regarding checkpoints"""
+        if self.state.current_checkpoint:
+            current_cp_metadata: dict[str, Any] | None = self.checkpoint_objects[self.state.current_checkpoint].metadata
+            metadata_str = "No metadata" if current_cp_metadata is None else json.dumps(current_cp_metadata, indent=2, ensure_ascii=False)
+            return f"""
+            **Current Workflow State**:
+            - Current checkpoint: {self.state.current_checkpoint}
+            - Checkpoint description: {self.checkpoint_objects[self.state.current_checkpoint].description}
+            - Checkpoint metadata: {metadata_str}
+            - Completed checkpoints: {', '.join(self.state.completed_checkpoints) if self.state.completed_checkpoints else "None"}
+            - Pending checkpoints: {', '.join(self.state.pending_checkpoints) if self.state.pending_checkpoints else "None"}
+            """
+    
         return f"""
         **Current Workflow State**:
-        - Current checkpoint: {self.state.current_checkpoint or "Not started"}
-        - Completed: {', '.join(self.state.completed_checkpoints) or "None"}
-        - Pending: {', '.join(self.state.pending_checkpoints)}
+        - Current checkpoint: Not started
+        - Completed checkpoints: {', '.join(self.state.completed_checkpoints) if self.state.completed_checkpoints else "None"}
+        - Pending checkpoints: {', '.join(self.state.pending_checkpoints) if self.state.pending_checkpoints else "None"}
         \n           
         """
     def _update_state_from_action_result(
@@ -269,6 +293,7 @@ class PCBAgent(ABC, Generic[DepsType]):
             self.state.workflow_state = WorkflowState.ERROR
         
         elif status == "verification_failed":
+            self.state.errors.append(action_result.error_message if action_result.error_message else "No error message was provided")
             self.state.workflow_state = WorkflowState.TEST_FAILED
         
         elif status == "checkpoint_verified":
@@ -327,42 +352,20 @@ class PCBAgent(ABC, Generic[DepsType]):
         else:
             return ActionResult(status="error", error_message="No tool name provided")
         
-        tool_func: ToolFunction|None = self.tool_registry.get_tool_function(tool_name)
-        if not tool_func:
-            return ActionResult(status="error", error_message=f"Unknown tool: {tool_name}")
+        if not action.tool_parameters:
+            return ActionResult(status="error", error_message=f"Tool {tool_name} parameters not provided")
         
-        tool_def: ToolDefinition = self.tool_registry.get_tool_definition(tool_name)
-        if not tool_def:
-            return ActionResult(status="error", error_message=f"Tool definition missing: {action.tool_name}")
+        tool_result: ToolResult = self.tool_registry.handle_tool_call(tool_name=tool_name,
+                                                                      tool_parameters=action.tool_parameters)
+        self.state.tool_results = tool_result
         
-        # Validate parameters (custom validation logic for every tool)
-        schema_errors: list|None = tool_def.validate_parameter_schema(action.tool_parameters)
-        if schema_errors:
-            return ActionResult(status="error", error_message=f"Tool '{tool_name}' parameters failed schema validation with errors: {schema_errors}")
-        
-        parameter_errors: list|None = tool_def.validate_parameters(action.tool_parameters)
-        if not parameter_errors:
-            try:
-                logger.info(f"Executing tool: {tool_name}")
-                if inspect.iscoroutinefunction(tool_func):
-                    tool_result: ToolResult = await tool_func(**action.tool_parameters) #type:ignore
-                else:
-                    tool_result: ToolResult = tool_func(**action.tool_parameters)
-                
-                # Store result
-                self.state.tool_results = tool_result
-                logger.success(f"Executed tool: {tool_name}")
-                
-                return ActionResult(
-                    status="tool_executed",
-                    tool_result=tool_result,
-                )
-            
-            except Exception as e:
-                logger.error(f"Tool execution failed: {e}", exc_info=True)
-                return ActionResult(status="error", error_message=f"Tool {tool_name} execution failed: {e}")
+        if tool_result.error_message:
+            return ActionResult(status="error", error_message=tool_result.error_message)
         else:
-            return ActionResult(status="error", error_message=f"Tool '{tool_name}' parameters failed validation with errors: {parameter_errors}")
+            return ActionResult(
+                status="tool_executed",
+                tool_result=tool_result,
+            )
     
     def _build_tool_return_message(self, tool_result: ToolResult) -> list[ModelMessage]:
         """Construct a synthetic ToolCallPart and ToolReturnPart message pair in pydanticAI native message format"""
@@ -483,18 +486,23 @@ class PCBAgent(ABC, Generic[DepsType]):
         checkpoint: Checkpoint = self.checkpoint_objects[checkpoint_name]
         
         # Call domain-specific verification
-        is_valid: bool = self.verify_checkpoint(checkpoint, deps)
+        if not (action.tool_name == checkpoint.verification_tool_name) and action.tool_name:
+            checkpoint.mark_failed("Verification failed")
+            return ActionResult(status="error", 
+                                checkpoint=checkpoint_name, 
+                                error_message=f"""Given {action.tool_name} is not matching with 
+                                the checkpoint verification tool {checkpoint.verification_tool_name}""")
         
-        if is_valid:
+        action_result: ActionResult = self._execute_tool_action(action, deps)
+        error_messages: Optional[list[str]] = self.verify_checkpoint(checkpoint, action_result, deps)
+        
+        if not error_messages:
             checkpoint.mark_completed()
             self.state.completed_checkpoints.append(checkpoint_name)
-            if checkpoint_name in self.state.pending_checkpoints:
-                self.state.pending_checkpoints.remove(checkpoint_name)
-            
             return ActionResult(status="checkpoint_verified", checkpoint=checkpoint_name)
         else:
             checkpoint.mark_failed("Verification failed")
-            return ActionResult(status="verification_failed", checkpoint=checkpoint_name)
+            return ActionResult(status="verification_failed", checkpoint=checkpoint_name, error_message="".join(error_messages))
     
     #--------------------------
     # Result
@@ -515,57 +523,63 @@ class PCBAgent(ABC, Generic[DepsType]):
             if cp.status == "failed"
         ]
         
-        summary, recommendations = await self._generate_llm_summary(success, completed, failed)
+        final_result: FinalResults = await self._generate_llm_summary_and_results(success, completed, failed)
         
         return WorkflowResult(
             success=success,
             session_id=session_id,
-            workflow_type=self.agent_type,
+            workflow_type=self._agent_type,
             final_state=self.state.workflow_state,
             completed_checkpoints=completed,
             failed_checkpoints=failed,
-            results=self.collect_final_results(),
-            recommendations=recommendations,
-            summary=summary,
+            results=final_result,
+            recommendations=final_result.recommendations,
+            summary=final_result.design_summary,
             total_execution_time=execution_time,
             errors=self.state.errors
         )
         
-    async def _generate_llm_summary(
+    async def _generate_llm_summary_and_results(
         self, 
         success: bool, 
         completed: list[Checkpoint],
         failed: list[Checkpoint]
-    ) -> tuple[str,str]:
+    ) -> FinalResults:
         """LLM based executive summary and recommendations"""
-        try:
-            summary_agent: memory_manager.SummaryAgent = memory_manager.SummaryAgent()
-            
-            context: str = f"""
-            Workflow Summary Context:
-            - Workflow Type: {self.agent_type}
-            - Success Status: {success}
-            - Total Checkpoints: {len(self.checkpoint_objects)}
-            - Completed Checkpoints: {len(completed)}
-            - Failed Checkpoints: {len(failed)}
-            
-            Completed Checkpoints:
-            {[cp.name for cp in completed]}
-            
-            Failed Checkpoints:
-            {[cp.name for cp in failed]}
-            
-            Error Messages:
-            {self._get_error_messages(success, failed)}
-            """
-            summary, recommendations = await summary_agent.generate_summary(context=context)
-            
-            return summary, recommendations
-        except Exception as e:
-            logger.error(f"LLM recommendations generation failed: {e}")
-            summary, recommendations = self._generate_basic_summary(success, completed, failed)
-            
-            return summary, recommendations
+        query: str = f"""
+        Workflow Summary Context:
+        - Workflow Type: {self._agent_type}
+        - Success Status: {success}
+        - Total Checkpoints: {len(self.checkpoint_objects)}
+        - Completed Checkpoints: {len(completed)}
+        - Failed Checkpoints: {len(failed)}
+        
+        Completed Checkpoints:
+        {[cp.name for cp in completed]}
+        
+        Failed Checkpoints:
+        {[cp.name for cp in failed]}
+        
+        Error Messages:
+        {self._get_error_messages(success, failed)}
+        
+        Generate the final results.
+        """
+        
+        effective_temperature: float = self.llm_settings.temperature
+        _result_agent: Agent[None, FinalResults] = Agent(
+            model=llm_model.get_llm_model(self.llm_settings),
+            model_settings=ModelSettings(temperature=effective_temperature),
+            output_type=self._final_results_type,
+            instructions="Based on the workflow execution, please generate the final results following the required structure."
+        )
+        relevant_message_history: list[ModelMessage] = self.memory.get_context(
+                query="Generate the final results",
+            )
+        final_result: AgentRunResult[FinalResults] = await _result_agent.run(user_prompt=query,
+                                                                            message_history=relevant_message_history)
+        
+        return final_result.output
         
     def _generate_basic_summary(
         self, 
@@ -628,24 +642,13 @@ class PCBAgent(ABC, Generic[DepsType]):
     def verify_checkpoint(
         self, 
         checkpoint: Checkpoint, 
+        action_result: ActionResult,
         deps: DepsType
-    ) -> bool:
+    ) -> Optional[list[str]]:
         """
         Verify that a checkpoint has been properly completed
+        Return error messages if not verified else None
         
         This should be implemented by domain-specific agents
-        """
-        pass
-    
-    @abstractmethod
-    def collect_final_results(self) -> dict[str,Any]:
-        """
-        Collect final workflow-specific results.
-        This should be implemented by domain-specific agents.
-
-        Returns
-        -------
-        dict[str,Any]
-            Final results of the workflow
         """
         pass

@@ -15,9 +15,11 @@ from loguru import logger
 class Checkpoint(BaseModel):
     """A verified checkpoint was reached in the workflow"""
     name: str = Field(..., description="Name of the checkpoint (Unique identifier)")
+    description: str = Field(..., description="Description of the checkpoint")
     status: Literal["pending", "in_progress","failed","completed"] = Field(default="pending", description="status of this checkpoint")
+    verification_tool_name: Optional[str] = Field(default=None, description="Name of the verification tool")
     timestamp: datetime = Field(default_factory=datetime.now)
-    metadata: dict[str, Any] = Field(default_factory=dict, description="Additional information")
+    metadata: Optional[dict[str, Any]] = Field(default=None, description="Additional information")
     error_message: Optional[str] = Field(default=None, description="Error message in case of failure")
     
     def mark_completed(self, metadata: Optional[dict[str, Any]] = None) -> None:
@@ -25,7 +27,7 @@ class Checkpoint(BaseModel):
         self.status = "completed"
         self.timestamp = datetime.now()
         if metadata:
-            self.metadata.update(metadata)
+            self.metadata.update(metadata) #type:ignore
     
     def mark_failed(self, error: str, metadata: Optional[dict[str, Any]] = None) -> None:
         """Mark checkpoint as failed"""
@@ -33,7 +35,7 @@ class Checkpoint(BaseModel):
         self.error_message = error
         self.timestamp = datetime.now()
         if metadata:
-            self.metadata.update(metadata)
+            self.metadata.update(metadata) #type:ignore
 
 class AgentAction(BaseModel):
     """Structured action that the agent can take"""
@@ -84,7 +86,8 @@ class ToolDefinition(ABC,BaseModel):
             "network",       # HTTP, APIs
             "retrieval",     # search, RAG, knowledge lookup
             "calculation",   # math, scoring, analytics
-            "simulation",    # simulation tools   
+            "simulation",    # simulation tools
+            "optimization",  # optimization tools   
             "code",          # code execution, linting, generation
             "monitoring",    # logs, metrics, alerts
             "orchestration", # scheduling, workflow control
@@ -139,12 +142,12 @@ class ToolDefinition(ABC,BaseModel):
             "returns": self.returns
         }
     
-    def validate_parameter_schema(self, parameters: dict[str,Any]) -> Optional[list[str]]:
+    def validate_parameter_schema(self, parameters_from_agent: dict[str,Any]) -> Optional[list[str]]:
         """Validate the paramter schema for this tool return None if valid"""    
         schema = self.parameters_schema["parameters"]  # {"type": "object", "properties": {...}}
         
         try:
-            validate(instance=parameters, schema=schema)
+            validate(instance=parameters_from_agent, schema=schema)
             return None
         except ValidationError as e:
             # Extract all validation errors
@@ -155,7 +158,7 @@ class ToolDefinition(ABC,BaseModel):
                 error = getattr(error, 'context', None)
             return errors       
     @abstractmethod
-    def validate_parameters(self, parameters: dict[str,Any]) -> Optional[list[str]]:
+    def validate_parameters(self, parameters_from_agent: dict[str,Any]) -> Optional[list[str]]:
         """Validate the paramters for this tool (custom rules) return None if valid"""
         pass
 
@@ -165,12 +168,26 @@ class ToolResult(BaseModel):
     success: bool
     result_data: dict[str, Any] = Field(default_factory=dict)
     error_message: Optional[str] = Field(default=None)
-    execution_time: float = Field(default=0.0, description="Execution time in seconds")
+    execution_time: Optional[float] = Field(default=None, description="Execution time in seconds")
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 #---------------------------------------------------------
 #                       Results
 #---------------------------------------------------------   
+class FinalResults(BaseModel):
+    """
+    Base class for final results that users can extend.
+    This structure will be used by the LLM to generate final results.
+    """
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+    # Common fields that might be useful for all workflows
+    design_requirements: Optional[dict[str, Any]] = Field(default=None, description="Final design requirements")
+    optimization_results: Optional[dict[str, Any]] = Field(default=None, description="Optimization outcomes")
+    performance_metrics: Optional[dict[str, Any]] = Field(default=None, description="Performance measurements")
+    component_selections: Optional[dict[str, Any]] = Field(default=None, description="Component choices made")
+    design_summary: Optional[str] = Field(default=None, description="Summary of final design")
+    recommendations: Optional[str] = Field(default=None, description="Recommendations for next steps")
+    
 class WorkflowResult(BaseModel):
     """Final result of workflow execution"""
     success: bool
@@ -181,9 +198,9 @@ class WorkflowResult(BaseModel):
     completed_checkpoints: list[Checkpoint]
     failed_checkpoints: list[Checkpoint]
     
-    results: dict[str, Any] = Field(default_factory=dict)
+    results: FinalResults = Field(..., description="Final results parameters")
     recommendations: str|None = Field(default=None, description="Recommendations from the agent")
-    summary: str = Field(..., description="Executive summary")
+    summary: Optional[str] = Field(..., description="Executive summary")
     
     total_execution_time: float = Field(default=0.0)
     errors: list[str] = Field(default_factory=list)
@@ -274,3 +291,31 @@ class AgentState(BaseModel):
 class Summary(BaseModel):
     summary: str = Field(...,description="Entire workflow summary")
     recommendation: str = Field(..., description="Recommendations for the designer")
+    
+#---------------------------------------------------------
+#                       Sub Agent
+#---------------------------------------------------------
+class PriorityBand(IntEnum):
+    P0 = 1   # Critical / top priority, reserved
+    P1 = 10  # High priority
+    P2 = 100 # Medium priority  
+    P3 = 1000 # Low priority
+    P4 = 10000 # Lowest priority, fallback
+    
+class SubAgentConfig(BaseModel):
+    # Identity
+    id: str = Field(..., description="Unique ID for internal routing, e.g. 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11'.")
+    name: str = Field(..., description="Human readable name.")
+    type: Literal["worker","router","critic"] = Field(..., description="Type of the agent")
+    
+    # Behaviour
+    description: str = Field(..., description="What this agent is for and when to use it.")
+    capabilities: list[str] = Field(
+        default_factory=list,
+        description="Short capability tags, e.g. ['summarization', 'web_search']."
+    )
+    
+    # Orchestration help
+    priority: PriorityBand = Field(default=PriorityBand.P2, description="Lower means more preferred when multiple agents match.")
+    status: Literal["active","disabled","experimental"] = Field(default="experimental", description="Status of the agent")
+    trigger_keywords: list[str] = Field(default_factory=list, description="If query contains these keywords, this agent is a candidate.")
