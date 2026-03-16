@@ -50,7 +50,8 @@ checkpoints: list[Checkpoint] = [
     Checkpoint(
         name="optimize_coupled_microstrip_geometry_parameters",
         description="Optimize geometric parameters using coupled microstrip optimizer",
-        verification_tool_name="simulate_bem" # Match with the name in the ToolDefinition
+        verification_tool_name="simulate_bem", # Match with the name in the ToolDefinition
+        verification_rule=""
     ),
 ]
 
@@ -63,14 +64,9 @@ tool_registry.register_tool(tool_def=cmpo_tool.get_tool_definition(),
 tool_registry.register_tool(tool_def=bfs_tool.get_tool_definition(),
                             tool_func=bfs_tool.get_tool_func())
 
-# Extend the abstract class to define custom functions
+# Define the agent
 #-----------------------------------------------------
-class CoupledStripAgent(PCBAgent):
-    def verify_checkpoint(self, checkpoint: Checkpoint, action_result: ActionResult, deps: Any) -> Optional[list[str]]:
-        error_messages:list[str] = []
-        return error_messages
-    
-coupled_strip_agent: CoupledStripAgent = CoupledStripAgent(agent_type="Coupled Microstrip Agent",
+coupled_strip_agent: PCBAgent = PCBAgent(agent_type="Coupled Microstrip Agent",
                                          task="Optimise the geometric parameters of the coupled microstrip strip arrangement",
                                          list_checkpoints=checkpoints,
                                          tool_registry=tool_registry)
