@@ -28,7 +28,9 @@ class Checkpoint(BaseModel):
         self.status = "completed"
         self.timestamp = datetime.now()
         if metadata:
-            self.metadata.update(metadata) #type:ignore
+            if self.metadata is None:
+                self.metadata = {}
+            self.metadata.update(metadata) 
     
     def mark_failed(self, error: str, metadata: Optional[dict[str, Any]] = None) -> None:
         """Mark checkpoint as failed"""
@@ -36,7 +38,9 @@ class Checkpoint(BaseModel):
         self.error_message = error
         self.timestamp = datetime.now()
         if metadata:
-            self.metadata.update(metadata) #type:ignore
+            if self.metadata is None:
+                self.metadata = {}
+            self.metadata.update(metadata)
 
 class AgentAction(BaseModel):
     """Structured action that the agent can take"""
