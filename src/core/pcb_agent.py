@@ -10,9 +10,6 @@ from pydantic_ai.messages import (ModelMessage,
                                   ModelRequest, 
                                   ToolReturnPart,
                                   UserPromptPart)
-                                #   ModelResponse, 
-                                #   ToolCallPart,  
-                                #   TextPart)
 from loguru import logger
 
 import llm_model
@@ -54,14 +51,15 @@ class PCBAgent(Generic[DepsType]):
         tool_registry: ToolRegistry,
         final_results_type: type[FinalResults] = FinalResults,
         deps_type: type[DepsType] = NoDeps,
-        temperature: Optional[float] = None,
-        **agent_kwargs) -> None:
+        temperature: Optional[float] = None) -> None:
         
         self._agent_type: str = agent_type
         self.task: str = task
         self._final_results_type: type[FinalResults] = final_results_type
         
+        #-------------------------------------
         # State management
+        #-------------------------------------
         self.state = AgentState(
             pending_checkpoints=[checkpoint.name for checkpoint in list_checkpoints]
         )
@@ -70,10 +68,14 @@ class PCBAgent(Generic[DepsType]):
             for checkpoint in list_checkpoints
         }
         
+        #-------------------------------------
         # Tool management
+        #-------------------------------------
         self.tool_registry: ToolRegistry = tool_registry
         
-        # Create Agent
+        #-------------------------------------
+        # Create main agent
+        #-------------------------------------
         system_prompt: str = self._build_system_prompt()
         
         self.llm_settings: LLMSettings = load_settings(key="llm")
@@ -86,19 +88,30 @@ class PCBAgent(Generic[DepsType]):
             system_prompt=system_prompt
         )
         
-        # Register tools with pydanticai
-        # self._register_pydanticai_tools()
-        
+        #-------------------------------------
         # Memory manager
+        #-------------------------------------
         self.memory = memory_manager.MemoryManager(agent_type=agent_type)
         
-        # Create Verification Agent
+        #-------------------------------------
+        # Verification agent
+        #-------------------------------------
         self._verification_agent: Agent[DepsType, VerificationResult] = Agent(
             model=llm_model.get_llm_model(self.llm_settings),
             model_settings=ModelSettings(temperature=0.1),
             deps_type=deps_type,
             output_type=VerificationResult,
             instructions="Based on the context and the rules mentioned verify the given Checkpoint."
+        )
+        
+        #-------------------------------------
+        # Result agent
+        #-------------------------------------
+        self._result_agent: Agent[None, FinalResults] = Agent(
+            model=llm_model.get_llm_model(self.llm_settings),
+            model_settings=ModelSettings(temperature=0.1),
+            output_type=self._final_results_type,
+            instructions="Based on the workflow execution, please generate the final results following the required structure."
         )
         
     def _build_system_prompt(self) -> str:
@@ -144,6 +157,45 @@ class PCBAgent(Generic[DepsType]):
         """
         pass
     
+    #--------------------------
+    # Reset
+    #--------------------------
+    def reset(self) -> None:
+        """
+        Reset the agent to initial state for a fresh run.
+        Clears all state, memory, checkpoint statuses, and tool results.
+        """
+        # Reset AgentState completely
+        self.state = AgentState(
+            pending_checkpoints=[checkpoint.name for checkpoint in self.checkpoint_objects.values()]
+        )
+        
+        # Reset checkpoint statuses to "pending"
+        for checkpoint in self.checkpoint_objects.values():
+            checkpoint.status = "pending"
+            checkpoint.error_message = None
+        
+        # Clear memory completely
+        self.memory.clear()
+        
+        # Reset tool results
+        self.state.tool_results = None
+        
+        # Clear human input state
+        self.state.needs_human_input = False
+        self.state.human_question = None
+        self.state.human_response = None
+        
+        # Reset retry counters and errors
+        self.state.retry_count = 0
+        self.state.errors = []
+        
+        # Reset workflow state
+        self.state.workflow_state = WorkflowState.INITIAL
+        self.state.current_checkpoint = None
+        self.state.completed_checkpoints = []
+        
+        logger.info(f"{self._agent_type} agent reset complete - ready for fresh run")
     #--------------------------
     # Run
     #--------------------------
@@ -199,7 +251,7 @@ class PCBAgent(Generic[DepsType]):
                             Reason: {action.reasoning}""")
                 
                 # Execute action
-                action_result: ActionResult = self._execute_action(action, deps)
+                action_result: ActionResult = await self._execute_action(action, deps)
                 
                 # Update state based on result
                 self._update_state_from_action_result(action_result)
@@ -296,6 +348,7 @@ class PCBAgent(Generic[DepsType]):
         - Pending checkpoints: {', '.join(self.state.pending_checkpoints) if self.state.pending_checkpoints else "None"}
         \n           
         """
+        
     def _update_state_from_action_result(
         self, 
         action_result: ActionResult
@@ -320,7 +373,7 @@ class PCBAgent(Generic[DepsType]):
     #--------------------------
     # Action Handling
     #--------------------------    
-    def _execute_action(
+    async def _execute_action(
         self, 
         action: AgentAction, 
         deps: DepsType
@@ -329,10 +382,10 @@ class PCBAgent(Generic[DepsType]):
         
         try:
             if action.action_type == "execute_tool":
-                return self._execute_tool_action(action, deps)
+                return await self._execute_tool_action(action, deps)
             
             elif action.action_type == "verify_checkpoint":
-                return self._verify_checkpoint_action(action, deps)
+                return await self._verify_checkpoint_action(action, deps)
             
             elif action.action_type == "request_human_input":
                 return self._request_human_input_action(action)
@@ -356,7 +409,7 @@ class PCBAgent(Generic[DepsType]):
             logger.error(f"Action execution error: {e}", exc_info=True)
             return ActionResult(status="error", error_message=str(e))
     
-    def _execute_tool_action(
+    async def _execute_tool_action(
         self, 
         action: AgentAction, 
         deps: DepsType
@@ -370,7 +423,7 @@ class PCBAgent(Generic[DepsType]):
         if not action.tool_parameters:
             return ActionResult(status="error", error_message=f"Tool {tool_name} parameters not provided")
         
-        tool_result: ToolResult = self.tool_registry.handle_tool_call(tool_name=tool_name,
+        tool_result: ToolResult = await self.tool_registry.handle_tool_call(tool_name=tool_name,
                                                                       tool_parameters=action.tool_parameters)
         self.state.tool_results = tool_result
         
@@ -453,7 +506,7 @@ class PCBAgent(Generic[DepsType]):
         self.state.current_checkpoint = next_checkpoint
         self.checkpoint_objects[next_checkpoint].status = "in_progress"
         
-        return ActionResult(status="context_updated", message=f"Next checkpoint {next_checkpoint}")
+        return ActionResult(status="proceed_to_next", message=f"Next checkpoint {next_checkpoint}")
     
     def _retry_checkpoint_action(self, action: AgentAction) -> ActionResult:
         """Retry current checkpoint"""
@@ -485,7 +538,7 @@ class PCBAgent(Generic[DepsType]):
     #--------------------------
     # Verification
     #--------------------------    
-    def _verify_checkpoint_action(
+    async def _verify_checkpoint_action(
         self, 
         action: AgentAction, 
         deps: DepsType
@@ -509,12 +562,12 @@ class PCBAgent(Generic[DepsType]):
                                     error_message=f"""Given {action.tool_name} is not matching with 
                                     the checkpoint verification tool {checkpoint.verification_tool_name}""")
     
-            tool_action_result: ActionResult = self._execute_tool_action(action, deps)
+            tool_action_result: ActionResult = await self._execute_tool_action(action, deps)
             self.memory.add_to_message_history(
                         self._build_tool_return_message(tool_action_result.tool_result) # type: ignore
                         ) # Add tool call results to memory
             
-        error_messages: Optional[str] = self._verify_checkpoint_with_llm(checkpoint, deps)
+        error_messages: Optional[str] = await self._verify_checkpoint_with_llm(checkpoint, deps)
         
         if not error_messages:
             checkpoint.mark_completed()
@@ -524,7 +577,7 @@ class PCBAgent(Generic[DepsType]):
             checkpoint.mark_failed("Verification failed")
             return ActionResult(status="verification_failed", checkpoint=checkpoint_name, error_message=error_messages)
     
-    def _verify_checkpoint_with_llm(self, 
+    async def _verify_checkpoint_with_llm(self, 
                                     checkpoint: Checkpoint,
                                     deps: DepsType) -> Optional[str]:
         
@@ -545,7 +598,7 @@ class PCBAgent(Generic[DepsType]):
         )
         
         # Run agent to get next action
-        result: AgentRunResult[VerificationResult] = self._verification_agent.run_sync(
+        result: AgentRunResult[VerificationResult] = await self._verification_agent.run(
             verification_query,
             deps=deps,
             message_history=relevant_message_history
@@ -621,18 +674,10 @@ class PCBAgent(Generic[DepsType]):
         
         Generate the final results.
         """
-        
-        effective_temperature: float = self.llm_settings.temperature
-        _result_agent: Agent[None, FinalResults] = Agent(
-            model=llm_model.get_llm_model(self.llm_settings),
-            model_settings=ModelSettings(temperature=effective_temperature),
-            output_type=self._final_results_type,
-            instructions="Based on the workflow execution, please generate the final results following the required structure."
-        )
         relevant_message_history: list[ModelMessage] = self.memory.get_context(
                 query="Generate the final results",
             )
-        final_result: AgentRunResult[FinalResults] = await _result_agent.run(user_prompt=query,
+        final_result: AgentRunResult[FinalResults] = await self._result_agent.run(user_prompt=query,
                                                                             message_history=relevant_message_history)
         
         return final_result.output
@@ -649,7 +694,7 @@ class PCBAgent(Generic[DepsType]):
         if success:
             return f"Workflow completed successfully. {len(completed)} checkpoints completed.", "No Recommendations"
         else:
-            return f"Workflow incomplete. {len(completed)} completed, {len(failed)} failed.", "/n".join(error_messages)
+            return f"Workflow incomplete. {len(completed)} completed, {len(failed)} failed.", "\n".join(error_messages)
     
     def _get_error_messages(
         self, 
