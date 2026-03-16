@@ -4,7 +4,7 @@ from pydantic_ai.messages import (ModelMessage,
                                   UserPromptPart, 
                                   ThinkingPart)
 
-from pydantic import BaseModel, Field
+from dataclasses import dataclass, field
 from loguru import logger
 import asyncio
 
@@ -17,7 +17,8 @@ from data_models import Summary
 #------------------------------------------
 # Memory State
 #------------------------------------------
-class MemoryState(BaseModel):
+@dataclass
+class MemoryState():
     """
     Holds the two-layer memory:
 
@@ -29,8 +30,8 @@ class MemoryState(BaseModel):
                       frozen_summary (None if idle).
     """
     frozen_summary: str = ""
-    live_tail: list[ModelMessage] = Field(default_factory=list)
-    _pending_task: asyncio.Task | None = Field(default=None, repr=False)
+    live_tail: list[ModelMessage] = field(default_factory=list)
+    _pending_task: asyncio.Task | None = field(default=None, repr=False)
 
 #------------------------------------------
 # Memory Agent (Think about this more)

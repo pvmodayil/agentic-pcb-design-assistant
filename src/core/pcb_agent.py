@@ -655,7 +655,7 @@ class PCBAgent(Generic[DepsType]):
         if success:
             return f"Workflow completed successfully. {len(completed)} checkpoints completed.", "No Recommendations"
         else:
-            return f"Workflow incomplete. {len(completed)} completed, {len(failed)} failed.", "/n".join(error_messages)
+            return f"Workflow incomplete. {len(completed)} completed, {len(failed)} failed.", "\n".join(error_messages)
     
     def _get_error_messages(
         self, 
