@@ -1,7 +1,6 @@
 from typing import TypeVar, Generic, Any, Optional
 from dataclasses import dataclass
 
-from abc import ABC, abstractmethod
 import uuid
 from datetime import datetime
 import json 
@@ -20,8 +19,15 @@ import llm_model
 from settings import load_settings, LLMSettings
 import memory_manager
 from tool_registry import ToolRegistry
-from data_models import AgentState, Checkpoint, AgentAction, WorkflowResult, WorkflowState, ToolResult, ActionResult, FinalResults
-        
+from data_models import (AgentState, 
+                        Checkpoint, 
+                        AgentAction, 
+                        WorkflowResult, 
+                        WorkflowState, 
+                        ToolResult, 
+                        ActionResult, 
+                        FinalResults,
+                        VerificationResult)
             
 #------------------------------------------
 # PCB Agent (Abstract agent class)
@@ -33,7 +39,7 @@ class NoDeps:
     """Must pass NoDeps if there are no dependencies"""
     pass
 
-class PCBAgent(ABC, Generic[DepsType]):
+class PCBAgent(Generic[DepsType]):
     """
     Base abstract class for all PCB Agents. 
     This provides the core infrastructure with flexibility 
@@ -85,6 +91,15 @@ class PCBAgent(ABC, Generic[DepsType]):
         
         # Memory manager
         self.memory = memory_manager.MemoryManager(agent_type=agent_type)
+        
+        # Create Verification Agent
+        self._verification_agent: Agent[DepsType, VerificationResult] = Agent(
+            model=llm_model.get_llm_model(self.llm_settings),
+            model_settings=ModelSettings(temperature=0.1),
+            deps_type=deps_type,
+            output_type=VerificationResult,
+            instructions="Based on the context and the rules mentioned verify the given Checkpoint."
+        )
         
     def _build_system_prompt(self) -> str:
         """Basic wrapper for the agent specific system prompt"""
@@ -486,15 +501,20 @@ class PCBAgent(ABC, Generic[DepsType]):
         checkpoint: Checkpoint = self.checkpoint_objects[checkpoint_name]
         
         # Call domain-specific verification
-        if not (action.tool_name == checkpoint.verification_tool_name) and action.tool_name:
-            checkpoint.mark_failed("Verification failed")
-            return ActionResult(status="error", 
-                                checkpoint=checkpoint_name, 
-                                error_message=f"""Given {action.tool_name} is not matching with 
-                                the checkpoint verification tool {checkpoint.verification_tool_name}""")
-        
-        action_result: ActionResult = self._execute_tool_action(action, deps)
-        error_messages: Optional[list[str]] = self.verify_checkpoint(checkpoint, action_result, deps)
+        if checkpoint.verification_tool_name: # When tool is mentioned with the checkpoint
+            if not (action.tool_name == checkpoint.verification_tool_name):
+                checkpoint.mark_failed("Verification failed")
+                return ActionResult(status="error", 
+                                    checkpoint=checkpoint_name, 
+                                    error_message=f"""Given {action.tool_name} is not matching with 
+                                    the checkpoint verification tool {checkpoint.verification_tool_name}""")
+    
+            tool_action_result: ActionResult = self._execute_tool_action(action, deps)
+            self.memory.add_to_message_history(
+                        self._build_tool_return_message(tool_action_result.tool_result) # type: ignore
+                        ) # Add tool call results to memory
+            
+        error_messages: Optional[str] = self._verify_checkpoint_with_llm(checkpoint, deps)
         
         if not error_messages:
             checkpoint.mark_completed()
@@ -502,8 +522,44 @@ class PCBAgent(ABC, Generic[DepsType]):
             return ActionResult(status="checkpoint_verified", checkpoint=checkpoint_name)
         else:
             checkpoint.mark_failed("Verification failed")
-            return ActionResult(status="verification_failed", checkpoint=checkpoint_name, error_message="".join(error_messages))
+            return ActionResult(status="verification_failed", checkpoint=checkpoint_name, error_message=error_messages)
     
+    def _verify_checkpoint_with_llm(self, 
+                                    checkpoint: Checkpoint,
+                                    deps: DepsType) -> Optional[str]:
+        
+        
+        verification_query: str = f"""
+        You have reached the checkpoint: {checkpoint.name} in the workflow and need to verify that the results obtained so far are accurate.
+        You must be precise with your anlysis as accuracy is very important in this workflow.
+        
+        **Verification Rule**: 
+        {checkpoint.verification_rule}
+        
+        Based on the Verification Rule associated with the checkpoint verify the checkpoint.
+        """
+        
+        # Get relevant context
+        relevant_message_history: list[ModelMessage] = self.memory.get_context(
+            query=verification_query,
+        )
+        
+        # Run agent to get next action
+        result: AgentRunResult[VerificationResult] = self._verification_agent.run_sync(
+            verification_query,
+            deps=deps,
+            message_history=relevant_message_history
+        )
+        
+        # Update memory
+        self.memory.add_to_message_history(result.new_messages())
+        
+        if result.output.success:
+            return None
+        elif result.output.error_messages:
+            return result.output.error_messages
+        else:
+            return "Verification failed but error messages were not obtained."
     #--------------------------
     # Result
     #--------------------------
@@ -634,21 +690,3 @@ class PCBAgent(ABC, Generic[DepsType]):
             self.state.needs_human_input = False
             self.state.workflow_state = WorkflowState.HUMAN_RESPONDED
             return ""
-    
-    #--------------------------
-    # Agent Specific Functions
-    #--------------------------
-    @abstractmethod
-    def verify_checkpoint(
-        self, 
-        checkpoint: Checkpoint, 
-        action_result: ActionResult,
-        deps: DepsType
-    ) -> Optional[list[str]]:
-        """
-        Verify that a checkpoint has been properly completed
-        Return error messages if not verified else None
-        
-        This should be implemented by domain-specific agents
-        """
-        pass

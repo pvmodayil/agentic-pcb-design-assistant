@@ -107,7 +107,7 @@ class MemoryManager:
             Produce an updated compact memory state (<=200 words) from the message history following the system prompt rules.
             """
         try:
-            result = await self._mem_agent.run(user_prompt=prompt, message_history=live_tail_snapshot)
+            result: AgentRunResult[str] = await self._mem_agent.run(user_prompt=prompt, message_history=live_tail_snapshot)
             self._memory_state.frozen_summary = self._extract_text(result)
             logger.debug(f"MemoryManager: compression done for checkpoint {checkpoint_label}.")
         except Exception:

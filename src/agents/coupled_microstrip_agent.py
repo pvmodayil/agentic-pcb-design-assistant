@@ -6,10 +6,10 @@ for the given target impedance. Verifications will be done using simulations wit
 """
 import yaml
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 from src.core.tool_registry import ToolRegistry
 from src.core.pcb_agent import PCBAgent
-from src.core.data_models import ActionResult, Checkpoint, WorkflowResult
+from src.core.data_models import  Checkpoint, WorkflowResult
 
 from src.tools import coupled_microstrip_parameter_optimizer_tool as cmpo_tool
 from src.tools import bem_field_solver_simulator as bfs_tool
@@ -50,7 +50,8 @@ checkpoints: list[Checkpoint] = [
     Checkpoint(
         name="optimize_coupled_microstrip_geometry_parameters",
         description="Optimize geometric parameters using coupled microstrip optimizer",
-        verification_tool_name="simulate_bem" # Match with the name in the ToolDefinition
+        verification_tool_name="simulate_bem", # Match with the name in the ToolDefinition
+        verification_rule=""
     ),
 ]
 
@@ -63,14 +64,9 @@ tool_registry.register_tool(tool_def=cmpo_tool.get_tool_definition(),
 tool_registry.register_tool(tool_def=bfs_tool.get_tool_definition(),
                             tool_func=bfs_tool.get_tool_func())
 
-# Extend the abstract class to define custom functions
+# Define the agent
 #-----------------------------------------------------
-class CoupledStripAgent(PCBAgent):
-    def verify_checkpoint(self, checkpoint: Checkpoint, action_result: ActionResult, deps: Any) -> Optional[list[str]]:
-        error_messages:list[str] = []
-        return error_messages
-    
-coupled_strip_agent: CoupledStripAgent = CoupledStripAgent(agent_type="Coupled Microstrip Agent",
+coupled_strip_agent: PCBAgent = PCBAgent(agent_type="Coupled Microstrip Agent",
                                          task="Optimise the geometric parameters of the coupled microstrip strip arrangement",
                                          list_checkpoints=checkpoints,
                                          tool_registry=tool_registry)

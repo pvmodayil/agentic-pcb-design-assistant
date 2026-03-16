@@ -1,0 +1,1 @@
+A common folder to store ouputs of tool calls(optimizations, simulations etc).
