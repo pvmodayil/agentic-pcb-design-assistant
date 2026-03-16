@@ -28,7 +28,9 @@ class Checkpoint(BaseModel):
         self.status = "completed"
         self.timestamp = datetime.now()
         if metadata:
-            self.metadata.update(metadata) #type:ignore
+            if self.metadata is None:
+                self.metadata = {}
+            self.metadata.update(metadata) 
     
     def mark_failed(self, error: str, metadata: Optional[dict[str, Any]] = None) -> None:
         """Mark checkpoint as failed"""
@@ -36,7 +38,9 @@ class Checkpoint(BaseModel):
         self.error_message = error
         self.timestamp = datetime.now()
         if metadata:
-            self.metadata.update(metadata) #type:ignore
+            if self.metadata is None:
+                self.metadata = {}
+            self.metadata.update(metadata)
 
 class AgentAction(BaseModel):
     """Structured action that the agent can take"""
@@ -173,62 +177,6 @@ class ToolResult(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 #---------------------------------------------------------
-#                       Results
-#---------------------------------------------------------   
-class VerificationResult(BaseModel):
-    """
-    Base class for verification result output
-    """
-    success: bool = Field(..., description="Verification status")
-    error_messages: Optional[str] = Field(default=None, description="Error message when verification fails")
-class FinalResults(BaseModel):
-    """
-    Base class for final results that users can extend.
-    This structure will be used by the LLM to generate final results.
-    """
-    model_config = ConfigDict(arbitrary_types_allowed=True)
-    # Common fields that might be useful for all workflows
-    design_requirements: Optional[dict[str, Any]] = Field(default=None, description="Final design requirements")
-    optimization_results: Optional[dict[str, Any]] = Field(default=None, description="Optimization outcomes")
-    performance_metrics: Optional[dict[str, Any]] = Field(default=None, description="Performance measurements")
-    component_selections: Optional[dict[str, Any]] = Field(default=None, description="Component choices made")
-    design_summary: Optional[str] = Field(default=None, description="Summary of final design")
-    recommendations: Optional[str] = Field(default=None, description="Recommendations for next steps")
-    
-class WorkflowResult(BaseModel):
-    """Final result of workflow execution"""
-    success: bool
-    session_id: str
-    workflow_type: str
-    final_state: WorkflowState
-    
-    completed_checkpoints: list[Checkpoint]
-    failed_checkpoints: list[Checkpoint]
-    
-    results: FinalResults = Field(..., description="Final results parameters")
-    recommendations: str|None = Field(default=None, description="Recommendations from the agent")
-    summary: Optional[str] = Field(..., description="Executive summary")
-    
-    total_execution_time: float = Field(default=0.0)
-    errors: list[str] = Field(default_factory=list)
-
-class ActionResult(BaseModel):
-    status: Literal[
-        "analyzed",
-        "context_updated",
-        "tool_executed",
-        "checkpoint_verified",
-        "human_input_received",
-        "workflow_completed",
-        "retry_required",
-        "verification_failed",
-        "error"] = Field(..., description="status")
-    tool_result: Optional[ToolResult] = Field(default=None, description="Results from tool executions")
-    checkpoint: Optional[str] = Field(default=None, description="Name of the checkpoint, if verification")
-    error_message: Optional[str] = Field(default=None, description="Error message")
-    message: Optional[str] = Field(default=None, description="Message")
-
-#---------------------------------------------------------
 #                       State
 #---------------------------------------------------------
 class WorkflowState(IntEnum):
@@ -291,6 +239,63 @@ class AgentState(BaseModel):
         """Increment retry counter"""
         self.retry_count += 1
         logger.warning(f"Retry count incremented to {self.retry_count}/{self.max_retries}")
+        
+#---------------------------------------------------------
+#                       Results
+#---------------------------------------------------------   
+class VerificationResult(BaseModel):
+    """
+    Base class for verification result output
+    """
+    success: bool = Field(..., description="Verification status")
+    error_messages: Optional[str] = Field(default=None, description="Error message when verification fails")
+class FinalResults(BaseModel):
+    """
+    Base class for final results that users can extend.
+    This structure will be used by the LLM to generate final results.
+    """
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+    # Common fields that might be useful for all workflows
+    design_requirements: Optional[dict[str, Any]] = Field(default=None, description="Final design requirements")
+    optimization_results: Optional[dict[str, Any]] = Field(default=None, description="Optimization outcomes")
+    performance_metrics: Optional[dict[str, Any]] = Field(default=None, description="Performance measurements")
+    component_selections: Optional[dict[str, Any]] = Field(default=None, description="Component choices made")
+    design_summary: Optional[str] = Field(default=None, description="Summary of final design")
+    recommendations: Optional[str] = Field(default=None, description="Recommendations for next steps")
+    
+class WorkflowResult(BaseModel):
+    """Final result of workflow execution"""
+    success: bool
+    session_id: str
+    workflow_type: str
+    final_state: WorkflowState
+    
+    completed_checkpoints: list[Checkpoint]
+    failed_checkpoints: list[Checkpoint]
+    
+    results: FinalResults = Field(..., description="Final results parameters")
+    recommendations: str|None = Field(default=None, description="Recommendations from the agent")
+    summary: Optional[str] = Field(..., description="Executive summary")
+    
+    total_execution_time: float = Field(default=0.0)
+    errors: list[str] = Field(default_factory=list)
+
+class ActionResult(BaseModel):
+    status: Literal[
+        "analyzed",
+        "context_updated",
+        "tool_executed",
+        "checkpoint_verified",
+        "human_input_received",
+        "proceed_to_next",
+        "workflow_completed",
+        "retry_required",
+        "verification_failed",
+        "error"] = Field(..., description="status")
+    tool_result: Optional[ToolResult] = Field(default=None, description="Results from tool executions")
+    checkpoint: Optional[str] = Field(default=None, description="Name of the checkpoint, if verification")
+    error_message: Optional[str] = Field(default=None, description="Error message")
+    message: Optional[str] = Field(default=None, description="Message")
 
 #---------------------------------------------------------
 #                       Summary
