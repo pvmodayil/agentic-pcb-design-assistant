@@ -158,6 +158,45 @@ class PCBAgent(Generic[DepsType]):
         pass
     
     #--------------------------
+    # Reset
+    #--------------------------
+    def reset(self) -> None:
+        """
+        Reset the agent to initial state for a fresh run.
+        Clears all state, memory, checkpoint statuses, and tool results.
+        """
+        # Reset AgentState completely
+        self.state = AgentState(
+            pending_checkpoints=[checkpoint.name for checkpoint in self.checkpoint_objects.values()]
+        )
+        
+        # Reset checkpoint statuses to "pending"
+        for checkpoint in self.checkpoint_objects.values():
+            checkpoint.status = "pending"
+            checkpoint.error_message = None
+        
+        # Clear memory completely
+        self.memory.clear()
+        
+        # Reset tool results
+        self.state.tool_results = None
+        
+        # Clear human input state
+        self.state.needs_human_input = False
+        self.state.human_question = None
+        self.state.human_response = None
+        
+        # Reset retry counters and errors
+        self.state.retry_count = 0
+        self.state.errors = []
+        
+        # Reset workflow state
+        self.state.workflow_state = WorkflowState.INITIAL
+        self.state.current_checkpoint = None
+        self.state.completed_checkpoints = []
+        
+        logger.info(f"{self._agent_type} agent reset complete - ready for fresh run")
+    #--------------------------
     # Run
     #--------------------------
     async def run(
