@@ -51,14 +51,15 @@ class PCBAgent(Generic[DepsType]):
         tool_registry: ToolRegistry,
         final_results_type: type[FinalResults] = FinalResults,
         deps_type: type[DepsType] = NoDeps,
-        temperature: Optional[float] = None,
-        **agent_kwargs) -> None:
+        temperature: Optional[float] = None) -> None:
         
         self._agent_type: str = agent_type
         self.task: str = task
         self._final_results_type: type[FinalResults] = final_results_type
         
+        #-------------------------------------
         # State management
+        #-------------------------------------
         self.state = AgentState(
             pending_checkpoints=[checkpoint.name for checkpoint in list_checkpoints]
         )
@@ -67,10 +68,14 @@ class PCBAgent(Generic[DepsType]):
             for checkpoint in list_checkpoints
         }
         
+        #-------------------------------------
         # Tool management
+        #-------------------------------------
         self.tool_registry: ToolRegistry = tool_registry
         
-        # Create Agent
+        #-------------------------------------
+        # Create main agent
+        #-------------------------------------
         system_prompt: str = self._build_system_prompt()
         
         self.llm_settings: LLMSettings = load_settings(key="llm")
@@ -83,19 +88,30 @@ class PCBAgent(Generic[DepsType]):
             system_prompt=system_prompt
         )
         
-        # Register tools with pydanticai
-        # self._register_pydanticai_tools()
-        
+        #-------------------------------------
         # Memory manager
+        #-------------------------------------
         self.memory = memory_manager.MemoryManager(agent_type=agent_type)
         
-        # Create Verification Agent
+        #-------------------------------------
+        # Verification agent
+        #-------------------------------------
         self._verification_agent: Agent[DepsType, VerificationResult] = Agent(
             model=llm_model.get_llm_model(self.llm_settings),
             model_settings=ModelSettings(temperature=0.1),
             deps_type=deps_type,
             output_type=VerificationResult,
             instructions="Based on the context and the rules mentioned verify the given Checkpoint."
+        )
+        
+        #-------------------------------------
+        # Result agent
+        #-------------------------------------
+        self._result_agent: Agent[None, FinalResults] = Agent(
+            model=llm_model.get_llm_model(self.llm_settings),
+            model_settings=ModelSettings(temperature=0.1),
+            output_type=self._final_results_type,
+            instructions="Based on the workflow execution, please generate the final results following the required structure."
         )
         
     def _build_system_prompt(self) -> str:
@@ -619,18 +635,10 @@ class PCBAgent(Generic[DepsType]):
         
         Generate the final results.
         """
-        
-        effective_temperature: float = self.llm_settings.temperature
-        _result_agent: Agent[None, FinalResults] = Agent(
-            model=llm_model.get_llm_model(self.llm_settings),
-            model_settings=ModelSettings(temperature=effective_temperature),
-            output_type=self._final_results_type,
-            instructions="Based on the workflow execution, please generate the final results following the required structure."
-        )
         relevant_message_history: list[ModelMessage] = self.memory.get_context(
                 query="Generate the final results",
             )
-        final_result: AgentRunResult[FinalResults] = await _result_agent.run(user_prompt=query,
+        final_result: AgentRunResult[FinalResults] = await self._result_agent.run(user_prompt=query,
                                                                             message_history=relevant_message_history)
         
         return final_result.output
