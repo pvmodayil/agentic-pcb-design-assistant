@@ -467,7 +467,7 @@ class PCBAgent(Generic[DepsType]):
         self.state.current_checkpoint = next_checkpoint
         self.checkpoint_objects[next_checkpoint].status = "in_progress"
         
-        return ActionResult(status="context_updated", message=f"Next checkpoint {next_checkpoint}")
+        return ActionResult(status="proceed_to_next", message=f"Next checkpoint {next_checkpoint}")
     
     def _retry_checkpoint_action(self, action: AgentAction) -> ActionResult:
         """Retry current checkpoint"""

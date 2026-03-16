@@ -287,6 +287,7 @@ class ActionResult(BaseModel):
         "tool_executed",
         "checkpoint_verified",
         "human_input_received",
+        "proceed_to_next",
         "workflow_completed",
         "retry_required",
         "verification_failed",
