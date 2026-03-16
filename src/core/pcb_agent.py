@@ -10,9 +10,6 @@ from pydantic_ai.messages import (ModelMessage,
                                   ModelRequest, 
                                   ToolReturnPart,
                                   UserPromptPart)
-                                #   ModelResponse, 
-                                #   ToolCallPart,  
-                                #   TextPart)
 from loguru import logger
 
 import llm_model
@@ -199,7 +196,7 @@ class PCBAgent(Generic[DepsType]):
                             Reason: {action.reasoning}""")
                 
                 # Execute action
-                action_result: ActionResult = self._execute_action(action, deps)
+                action_result: ActionResult = await self._execute_action(action, deps)
                 
                 # Update state based on result
                 self._update_state_from_action_result(action_result)
@@ -296,6 +293,7 @@ class PCBAgent(Generic[DepsType]):
         - Pending checkpoints: {', '.join(self.state.pending_checkpoints) if self.state.pending_checkpoints else "None"}
         \n           
         """
+        
     def _update_state_from_action_result(
         self, 
         action_result: ActionResult
@@ -320,7 +318,7 @@ class PCBAgent(Generic[DepsType]):
     #--------------------------
     # Action Handling
     #--------------------------    
-    def _execute_action(
+    async def _execute_action(
         self, 
         action: AgentAction, 
         deps: DepsType
@@ -329,10 +327,10 @@ class PCBAgent(Generic[DepsType]):
         
         try:
             if action.action_type == "execute_tool":
-                return self._execute_tool_action(action, deps)
+                return await self._execute_tool_action(action, deps)
             
             elif action.action_type == "verify_checkpoint":
-                return self._verify_checkpoint_action(action, deps)
+                return await self._verify_checkpoint_action(action, deps)
             
             elif action.action_type == "request_human_input":
                 return self._request_human_input_action(action)
@@ -356,7 +354,7 @@ class PCBAgent(Generic[DepsType]):
             logger.error(f"Action execution error: {e}", exc_info=True)
             return ActionResult(status="error", error_message=str(e))
     
-    def _execute_tool_action(
+    async def _execute_tool_action(
         self, 
         action: AgentAction, 
         deps: DepsType
@@ -370,7 +368,7 @@ class PCBAgent(Generic[DepsType]):
         if not action.tool_parameters:
             return ActionResult(status="error", error_message=f"Tool {tool_name} parameters not provided")
         
-        tool_result: ToolResult = self.tool_registry.handle_tool_call(tool_name=tool_name,
+        tool_result: ToolResult = await self.tool_registry.handle_tool_call(tool_name=tool_name,
                                                                       tool_parameters=action.tool_parameters)
         self.state.tool_results = tool_result
         
@@ -485,7 +483,7 @@ class PCBAgent(Generic[DepsType]):
     #--------------------------
     # Verification
     #--------------------------    
-    def _verify_checkpoint_action(
+    async def _verify_checkpoint_action(
         self, 
         action: AgentAction, 
         deps: DepsType
@@ -509,12 +507,12 @@ class PCBAgent(Generic[DepsType]):
                                     error_message=f"""Given {action.tool_name} is not matching with 
                                     the checkpoint verification tool {checkpoint.verification_tool_name}""")
     
-            tool_action_result: ActionResult = self._execute_tool_action(action, deps)
+            tool_action_result: ActionResult = await self._execute_tool_action(action, deps)
             self.memory.add_to_message_history(
                         self._build_tool_return_message(tool_action_result.tool_result) # type: ignore
                         ) # Add tool call results to memory
             
-        error_messages: Optional[str] = self._verify_checkpoint_with_llm(checkpoint, deps)
+        error_messages: Optional[str] = await self._verify_checkpoint_with_llm(checkpoint, deps)
         
         if not error_messages:
             checkpoint.mark_completed()
@@ -524,7 +522,7 @@ class PCBAgent(Generic[DepsType]):
             checkpoint.mark_failed("Verification failed")
             return ActionResult(status="verification_failed", checkpoint=checkpoint_name, error_message=error_messages)
     
-    def _verify_checkpoint_with_llm(self, 
+    async def _verify_checkpoint_with_llm(self, 
                                     checkpoint: Checkpoint,
                                     deps: DepsType) -> Optional[str]:
         
@@ -545,7 +543,7 @@ class PCBAgent(Generic[DepsType]):
         )
         
         # Run agent to get next action
-        result: AgentRunResult[VerificationResult] = self._verification_agent.run_sync(
+        result: AgentRunResult[VerificationResult] = await self._verification_agent.run(
             verification_query,
             deps=deps,
             message_history=relevant_message_history

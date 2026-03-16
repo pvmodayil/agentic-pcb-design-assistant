@@ -45,7 +45,7 @@ class ToolRegistry:
             descriptions.append(json.dumps(tool.parameters_schema, indent=2))
         return "\n\n".join(descriptions)
     
-    def handle_tool_call(self, tool_name: str, tool_parameters: dict[str,Any]) -> ToolResult:
+    async def handle_tool_call(self, tool_name: str, tool_parameters: dict[str,Any]) -> ToolResult:
         """handle the tool call with validations"""
         error_message: str | None = None
         
@@ -72,7 +72,7 @@ class ToolRegistry:
             try:
                 logger.info(f"Executing tool: {tool_name}")
                 if inspect.iscoroutinefunction(tool_func):
-                    result: dict[str,Any] = await tool_func(**tool_parameters) #type:ignore
+                    result: dict[str,Any] = await tool_func(**tool_parameters)
                 else:
                     result: dict[str,Any] = tool_func(**tool_parameters)
                 
