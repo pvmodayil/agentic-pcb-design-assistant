@@ -23,8 +23,8 @@ def _load_config(config_path: str = "bem_field_solver_simulator.yaml") -> dict[s
     # Extract BEM-specific settings
     bem_config: dict[str,Any] = {
         'executable_path': Path(config['bem']['executable']),
-        'template_path': PROJECT_ROOT / config['bem']['template'],
-        'resultfile_path': PROJECT_ROOT / config['bem']['resultfile'],
+        'template_path': PROJECT_ROOT / "outputs" / config['bem']['template'],
+        'resultfile_path': PROJECT_ROOT / "outputs" / config['bem']['resultfile'],
         'timeout': int(config['bem']['timeout']) # value in seconds
     }
 
