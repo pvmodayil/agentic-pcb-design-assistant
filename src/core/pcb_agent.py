@@ -566,8 +566,11 @@ class PCBAgent(Generic[DepsType]):
             self.memory.add_to_message_history(
                         self._build_tool_return_message(tool_action_result.tool_result) # type: ignore
                         ) # Add tool call results to memory
-            
-        error_messages: Optional[str] = await self._verify_checkpoint_with_llm(checkpoint, deps)
+        
+        if checkpoint.verification_strategy == "analytical":    
+            error_messages: Optional[str] = await self._verify_checkpoint_with_llm(checkpoint, deps)
+        else: # startegy == "heuristics"
+            error_messages: Optional[str] = await self._verify_checkpoint_with_heuristics()
         
         if not error_messages:
             checkpoint.mark_completed()
@@ -580,8 +583,9 @@ class PCBAgent(Generic[DepsType]):
     async def _verify_checkpoint_with_llm(self, 
                                     checkpoint: Checkpoint,
                                     deps: DepsType) -> Optional[str]:
-        
-        
+        """
+        Prompt the LLM with the given rule to verify the Checkpoint analytically
+        """
         verification_query: str = f"""
         You have reached the checkpoint: {checkpoint.name} in the workflow and need to verify that the results obtained so far are accurate.
         You must be precise with your anlysis as accuracy is very important in this workflow.
@@ -613,6 +617,10 @@ class PCBAgent(Generic[DepsType]):
             return result.output.error_messages
         else:
             return "Verification failed but error messages were not obtained."
+    
+    async def _verify_checkpoint_with_heuristics(self) -> Optional[str]:
+        pass
+    
     #--------------------------
     # Result
     #--------------------------

@@ -6,14 +6,13 @@ for the given target impedance. Verifications will be done using simulations wit
 """
 import yaml
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 from src.core.tool_registry import ToolRegistry
 from src.core.pcb_agent import PCBAgent
-from src.core.data_models import  Checkpoint, WorkflowResult
+from src.core.data_models import  Checkpoint, WorkflowResult, VerificationResult
 
 from src.tools import coupled_microstrip_parameter_optimizer_tool as cmpo_tool
 from src.tools import bem_field_solver_simulator as bfs_tool
-
 
 PROJECT_ROOT: Path = Path(__file__).resolve().parents[3]  # Up 3 levels: agents -> src -> root
 
@@ -44,14 +43,68 @@ def _load_config(config_path: str = "coupled_microstrip.yaml") -> dict[str,Any]:
     
     return {'workflow': workflow, 'optimization': optimization}
 
+# Checkpoint verifier functions
+#--------------------------------------------
+async def verify_optimization(target_zdiff: float, optimized_zdiff: float, simulated_zdiff: float) -> VerificationResult:
+    workflow_config: dict[str, Any] = _load_config()
+    success: bool
+    notes: str
+    error_messages: str
+    
+    # Calculate errors
+    sim_error: float = abs(simulated_zdiff - target_zdiff) / target_zdiff * 100
+    opt_error: float = abs(optimized_zdiff - target_zdiff) / target_zdiff * 100
+    discrepancy: float = abs(optimized_zdiff - simulated_zdiff) / target_zdiff * 100
+    
+    # Check convergence using threshold
+    bem_converged: bool = sim_error < workflow_config["optimization"]["convergence_threshold"]
+    ml_converged: bool = opt_error < workflow_config["optimization"]["convergence_threshold"]
+    
+    if bem_converged:
+        # Case 1: BEM converged → SUCCESS
+        success = True
+        notes = f"""
+        Design meets target impedance.
+        BEM result: {simulated_zdiff:.2f}Ω (target: {target_zdiff:.2f}Ω, error: {sim_error:.2f}%)
+        """
+        error_messages = ""
+        
+    
+    elif ml_converged and not bem_converged:
+        # Case 2: ML says yes, BEM says no → ML/Optimizer unreliable
+        success = False
+        notes = f"Model simulation dicrepancy in percentage: {round(discrepancy, 2)}"
+        error_messages = f"""
+            **OPTIMIZER UNRELIABLE**
+            ML optimizer predicted convergence, but BEM validation failed."
+            ML predicted: {optimized_zdiff:.2f}Ω (error: {opt_error:.2f}%)"
+            BEM result: {simulated_zdiff:.2f}Ω (error: {sim_error:.2f}%)"
+            The optimizer found a false solution. Using BEM result as ground truth."
+        """
+        
+    else:
+        # Case 3: Both failed → Complete failure
+        success = False
+        notes = ""
+        error_messages = f"""
+        **OPTIMIZATION FAILED**
+        Could not achieve target impedance.
+        BEM result: {simulated_zdiff:.2f}Ω (target: {target_zdiff:.2f}Ω, error: {sim_error:.2f}%)
+        Target not achievable with current constraints
+        """
+    return VerificationResult(success=success,
+                              notes=notes,
+                              error_messages=error_messages)
+    
 # Create list of checkpoints for the workflow
 #--------------------------------------------
 checkpoints: list[Checkpoint] = [
     Checkpoint(
         name="optimize_coupled_microstrip_geometry_parameters",
         description="Optimize geometric parameters using coupled microstrip optimizer",
+        verification_strategy="heuristics",
         verification_tool_name="simulate_bem", # Match with the name in the ToolDefinition
-        verification_rule=""
+        verifier_function=verify_optimization
     ),
 ]
 
