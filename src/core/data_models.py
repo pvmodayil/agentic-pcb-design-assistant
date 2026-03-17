@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Optional, Literal, Any, Callable
+from typing import Optional, Literal, Any, Callable, Awaitable
 from datetime import datetime
 
 from jsonschema import validate, ValidationError
@@ -13,6 +13,7 @@ from loguru import logger
 #---------------------------------------------------------
 #                     Agent & Workflow
 #---------------------------------------------------------
+VerifierFunction = Callable[..., Awaitable["VerificationResult"]] # Type in quotes to defer the evaluation until python sees it
 class Checkpoint(BaseModel):
     """A verified checkpoint was reached in the workflow"""
     name: str = Field(..., description="Name of the checkpoint (Unique identifier)")
@@ -21,7 +22,7 @@ class Checkpoint(BaseModel):
     verification_strategy: Literal["analytical", "heuristics"] = Field(..., description="Specify the strategy")
     verification_tool_name: Optional[str] = Field(default=None, description="Name of the verification tool")
     verification_rule: Optional[str] = Field(default=None, description="Prompt to gverify the checkpoint")
-    verifier_function: Optional[Callable] = Field(default=None, description="Fucntion to verify based on heuristics")
+    verifier_function: Optional[VerifierFunction] = Field(default=None, description="Fucntion to verify based on heuristics")
     timestamp: datetime = Field(default_factory=datetime.now)
     metadata: Optional[dict[str, Any]] = Field(default=None, description="Additional information")
     error_message: Optional[str] = Field(default=None, description="Error message in case of failure")
