@@ -1,4 +1,5 @@
-from typing import Optional, Literal, Any
+from __future__ import annotations
+from typing import Optional, Literal, Any, Callable
 from datetime import datetime
 
 from jsonschema import validate, ValidationError
@@ -17,8 +18,10 @@ class Checkpoint(BaseModel):
     name: str = Field(..., description="Name of the checkpoint (Unique identifier)")
     description: str = Field(..., description="Description of the checkpoint")
     status: Literal["pending", "in_progress","failed","completed"] = Field(default="pending", description="status of this checkpoint")
+    verification_strategy: Literal["analytical", "heuristics"] = Field(..., description="Specify the strategy")
     verification_tool_name: Optional[str] = Field(default=None, description="Name of the verification tool")
-    verification_rule: str = Field(..., description="Prompt to gverify the checkpoint")
+    verification_rule: Optional[str] = Field(default=None, description="Prompt to gverify the checkpoint")
+    verifier_function: Optional[Callable] = Field(default=None, description="Fucntion to verify based on heuristics")
     timestamp: datetime = Field(default_factory=datetime.now)
     metadata: Optional[dict[str, Any]] = Field(default=None, description="Additional information")
     error_message: Optional[str] = Field(default=None, description="Error message in case of failure")
@@ -239,16 +242,27 @@ class AgentState(BaseModel):
         """Increment retry counter"""
         self.retry_count += 1
         logger.warning(f"Retry count incremented to {self.retry_count}/{self.max_retries}")
-        
+
 #---------------------------------------------------------
-#                       Results
-#---------------------------------------------------------   
+#                     Verification
+#---------------------------------------------------------
+class ParameterGather(BaseModel):
+    """
+    Base class to gather parameters
+    """
+    parameters: dict[str,Any] = Field(..., description="Specified parameters for the verifier function")
+    
 class VerificationResult(BaseModel):
     """
     Base class for verification result output
     """
     success: bool = Field(..., description="Verification status")
+    notes: Optional[str] = Field(default=None, description="Notes after verification")
     error_messages: Optional[str] = Field(default=None, description="Error message when verification fails")
+    
+#---------------------------------------------------------
+#                       Results
+#---------------------------------------------------------   
 class FinalResults(BaseModel):
     """
     Base class for final results that users can extend.

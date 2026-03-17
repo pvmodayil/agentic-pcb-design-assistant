@@ -1,9 +1,10 @@
 from typing import Any, Callable
 import inspect
+from typing import get_type_hints
 from loguru import logger
 
-from data_models import ToolDefinition
-from data_models import ToolResult
+from .data_models import ToolDefinition
+from .data_models import ToolResult
 #--------------------------------------------
 # Tool Registry (To Register Tools for Agent)
 #--------------------------------------------
@@ -98,5 +99,20 @@ class ToolRegistry:
         return tool_result
         
             
-        
+def get_function_parameters(func: Callable) -> str:
+    """
+    Introspect a function and return a human-readable
+    parameter description for the LLM extraction prompt.
+    """
+    sig: inspect.Signature = inspect.signature(func)
+    hints: dict[str, Any] = get_type_hints(func)
+    
+    lines = []
+    for name, param in sig.parameters.items():
+        type_name: str = hints.get(name, Any).__name__ if isinstance(hints.get(name, Any), type) else str(hints.get(name, Any))
+        has_default: bool = param.default is not inspect.Parameter.empty
+        default_str: str = f", default={param.default}" if has_default else ", required"
+        lines.append(f"- {name} ({type_name}{default_str})")
+    
+    return "\n".join(lines)        
             

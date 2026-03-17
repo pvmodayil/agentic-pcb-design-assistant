@@ -15,7 +15,7 @@ from loguru import logger
 import llm_model
 from settings import load_settings, LLMSettings
 import memory_manager
-from tool_registry import ToolRegistry
+from tool_registry import ToolRegistry, get_function_parameters
 from data_models import (AgentState, 
                         Checkpoint, 
                         AgentAction, 
@@ -24,6 +24,7 @@ from data_models import (AgentState,
                         ToolResult, 
                         ActionResult, 
                         FinalResults,
+                        ParameterGather,
                         VerificationResult)
             
 #------------------------------------------
@@ -96,6 +97,15 @@ class PCBAgent(Generic[DepsType]):
         #-------------------------------------
         # Verification agent
         #-------------------------------------
+        self._parameter_agent: Agent[DepsType, ParameterGather] = Agent(
+            model=llm_model.get_llm_model(self.llm_settings),
+            model_settings=ModelSettings(temperature=0),
+            deps_type=deps_type,
+            output_type=ParameterGather,
+            instructions="""Extract parameters from context exactly as specified.
+            Do not infer, estimate, or add keys that were not requested."""
+        )
+        
         self._verification_agent: Agent[DepsType, VerificationResult] = Agent(
             model=llm_model.get_llm_model(self.llm_settings),
             model_settings=ModelSettings(temperature=0.1),
@@ -566,8 +576,11 @@ class PCBAgent(Generic[DepsType]):
             self.memory.add_to_message_history(
                         self._build_tool_return_message(tool_action_result.tool_result) # type: ignore
                         ) # Add tool call results to memory
-            
-        error_messages: Optional[str] = await self._verify_checkpoint_with_llm(checkpoint, deps)
+        
+        if checkpoint.verification_strategy == "analytical":    
+            error_messages: Optional[str] = await self._verify_checkpoint_with_llm(checkpoint, deps)
+        else: # startegy == "heuristics"
+            error_messages: Optional[str] = await self._verify_checkpoint_with_heuristics(checkpoint, deps)
         
         if not error_messages:
             checkpoint.mark_completed()
@@ -580,8 +593,9 @@ class PCBAgent(Generic[DepsType]):
     async def _verify_checkpoint_with_llm(self, 
                                     checkpoint: Checkpoint,
                                     deps: DepsType) -> Optional[str]:
-        
-        
+        """
+        Prompt the LLM with the given rule to verify the Checkpoint analytically
+        """
         verification_query: str = f"""
         You have reached the checkpoint: {checkpoint.name} in the workflow and need to verify that the results obtained so far are accurate.
         You must be precise with your anlysis as accuracy is very important in this workflow.
@@ -613,6 +627,66 @@ class PCBAgent(Generic[DepsType]):
             return result.output.error_messages
         else:
             return "Verification failed but error messages were not obtained."
+    
+    async def _verify_checkpoint_with_heuristics(self, checkpoint: Checkpoint, deps: DepsType) -> Optional[str]:
+        
+        if checkpoint.verifier_function is None:
+            return "No verifier function is defined with the Checkpoint. Error in definition must ask human"
+        else: 
+            parameters: dict[str,Any] = await self._gather_parameters(checkpoint, deps)
+            if not parameters:
+                return "Erro in gathering parameters for the verifier function notify human."
+        
+        result: VerificationResult = await checkpoint.verifier_function(**parameters)
+        
+        # Update memory
+        if result.notes:
+            message: list[ModelMessage] = [ModelRequest(
+                parts=[UserPromptPart(
+                    content=f"[VERIFICATION NOTES] {result.notes}."
+                )]
+            )]
+            
+            self.memory.add_to_message_history(message)
+     
+        if result.success:
+            return None
+        elif result.error_messages:
+            return result.error_messages
+        else:
+            return "Verification failed but error messages were not obtained."
+        
+    async def _gather_parameters(self, checkpoint: Checkpoint, deps: DepsType) -> dict[str,Any]:
+        """
+        Gather parameters by prompting the LLM
+        """
+        if checkpoint.verifier_function is None:
+            return {}
+        
+        extraction_query: str = f"""
+        You are at checkpoint '{checkpoint.name}' and a heuristic verification is required.
+    
+        Extract ONLY the following parameters from the results accumulated so far.
+        
+        **Parameters to extract**:
+        {get_function_parameters(checkpoint.verifier_function)}
+        
+        """
+        
+        # Get relevant context
+        relevant_message_history: list[ModelMessage] = self.memory.get_context(
+            query=extraction_query,
+        )
+        
+        # Run agent to get next action
+        result: AgentRunResult[ParameterGather] = await self._parameter_agent.run(
+            extraction_query,
+            deps=deps,
+            message_history=relevant_message_history
+        )
+        
+        return result.output.parameters
+        
     #--------------------------
     # Result
     #--------------------------
