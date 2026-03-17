@@ -43,13 +43,13 @@ def _load_config(config_path: str = "coupled_microstrip.yaml") -> dict[str,Any]:
     
     return {'workflow': workflow, 'optimization': optimization}
 
-# Checkpoint verifier functions
+# Checkpoint verifier functions (define async)
 #--------------------------------------------
 async def verify_optimization(target_zdiff: float, optimized_zdiff: float, simulated_zdiff: float) -> VerificationResult:
     workflow_config: dict[str, Any] = _load_config()
     success: bool
-    notes: str
-    error_messages: str
+    notes: Optional[str]
+    error_messages: Optional[str]
     
     # Calculate errors
     sim_error: float = abs(simulated_zdiff - target_zdiff) / target_zdiff * 100
@@ -67,7 +67,7 @@ async def verify_optimization(target_zdiff: float, optimized_zdiff: float, simul
         Design meets target impedance.
         BEM result: {simulated_zdiff:.2f}Ω (target: {target_zdiff:.2f}Ω, error: {sim_error:.2f}%)
         """
-        error_messages = ""
+        error_messages = None
         
     
     elif ml_converged and not bem_converged:
@@ -85,7 +85,7 @@ async def verify_optimization(target_zdiff: float, optimized_zdiff: float, simul
     else:
         # Case 3: Both failed → Complete failure
         success = False
-        notes = ""
+        notes = None
         error_messages = f"""
         **OPTIMIZATION FAILED**
         Could not achieve target impedance.

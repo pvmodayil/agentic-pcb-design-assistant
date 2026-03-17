@@ -1,3 +1,4 @@
+from __future__ import annotations
 from typing import Optional, Literal, Any, Callable
 from datetime import datetime
 
@@ -243,8 +244,14 @@ class AgentState(BaseModel):
         logger.warning(f"Retry count incremented to {self.retry_count}/{self.max_retries}")
 
 #---------------------------------------------------------
-#                       Results
-#---------------------------------------------------------   
+#                     Verification
+#---------------------------------------------------------
+class ParameterGather(BaseModel):
+    """
+    Base class to gather parameters
+    """
+    parameters: dict[str,Any] = Field(..., description="Specified parameters for the verifier function")
+    
 class VerificationResult(BaseModel):
     """
     Base class for verification result output
@@ -253,6 +260,9 @@ class VerificationResult(BaseModel):
     notes: Optional[str] = Field(default=None, description="Notes after verification")
     error_messages: Optional[str] = Field(default=None, description="Error message when verification fails")
     
+#---------------------------------------------------------
+#                       Results
+#---------------------------------------------------------   
 class FinalResults(BaseModel):
     """
     Base class for final results that users can extend.
