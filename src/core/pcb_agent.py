@@ -50,6 +50,7 @@ class PCBAgent(Generic[DepsType]):
         task: str,
         list_checkpoints: list[Checkpoint],
         tool_registry: ToolRegistry,
+        max_checkpoint_retries: Optional[int] = None,
         final_results_type: type[FinalResults] = FinalResults,
         deps_type: type[DepsType] = NoDeps,
         temperature: Optional[float] = None) -> None:
@@ -62,8 +63,11 @@ class PCBAgent(Generic[DepsType]):
         # State management
         #-------------------------------------
         self.state = AgentState(
-            pending_checkpoints=[checkpoint.name for checkpoint in list_checkpoints]
+            pending_checkpoints=[checkpoint.name for checkpoint in list_checkpoints],
         )
+        if max_checkpoint_retries:
+            self.state.max_retries = max_checkpoint_retries
+        
         self.checkpoint_objects: dict[str, Checkpoint] = {
             checkpoint.name: checkpoint
             for checkpoint in list_checkpoints
@@ -176,9 +180,22 @@ class PCBAgent(Generic[DepsType]):
         Clears all state, memory, checkpoint statuses, and tool results.
         """
         # Reset AgentState completely
-        self.state = AgentState(
-            pending_checkpoints=[checkpoint.name for checkpoint in self.checkpoint_objects.values()]
-        )
+        self.state.version += 1
+        self.state.workflow_state = WorkflowState.INITIAL
+        self.state.current_checkpoint = None
+        self.state.completed_checkpoints = []
+        self.state.pending_checkpoints = [checkpoint.name for checkpoint in self.checkpoint_objects.values()]
+        
+        self.state.context_data = {}
+        self.state.tool_results = None
+        
+        self.state.needs_human_input = False
+        self.state.human_question = None
+        self.state.human_response = None
+        
+        self.state.errors = []
+        self.state.retry_count = 0
+        # max_retries not touched as it is what we got from init
         
         # Reset checkpoint statuses to "pending"
         for checkpoint in self.checkpoint_objects.values():
@@ -187,25 +204,9 @@ class PCBAgent(Generic[DepsType]):
         
         # Clear memory completely
         self.memory.clear()
-        
-        # Reset tool results
-        self.state.tool_results = None
-        
-        # Clear human input state
-        self.state.needs_human_input = False
-        self.state.human_question = None
-        self.state.human_response = None
-        
-        # Reset retry counters and errors
-        self.state.retry_count = 0
-        self.state.errors = []
-        
-        # Reset workflow state
-        self.state.workflow_state = WorkflowState.INITIAL
-        self.state.current_checkpoint = None
-        self.state.completed_checkpoints = []
-        
+
         logger.info(f"{self._agent_type} agent reset complete - ready for fresh run")
+        
     #--------------------------
     # Run
     #--------------------------
@@ -576,11 +577,14 @@ class PCBAgent(Generic[DepsType]):
             self.memory.add_to_message_history(
                         self._build_tool_return_message(tool_action_result.tool_result) # type: ignore
                         ) # Add tool call results to memory
-        
-        if checkpoint.verification_strategy == "analytical":    
-            error_messages: Optional[str] = await self._verify_checkpoint_with_llm(checkpoint, deps)
-        else: # startegy == "heuristics"
-            error_messages: Optional[str] = await self._verify_checkpoint_with_heuristics(checkpoint, deps)
+        try:
+            if checkpoint.verification_strategy == "analytical":    
+                error_messages: Optional[str] = await self._verify_checkpoint_with_llm(checkpoint, deps)
+            else: # startegy == "heuristics"
+                error_messages: Optional[str] = await self._verify_checkpoint_with_heuristics(checkpoint, deps)
+        except Exception as e:
+            logger.exception(f"Exception encountered while verifying Checkpoint: {checkpoint_name}")
+            error_messages = f"Verification execution encountered error with message: {e}"
         
         if not error_messages:
             checkpoint.mark_completed()
