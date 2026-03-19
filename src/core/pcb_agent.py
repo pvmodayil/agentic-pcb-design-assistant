@@ -182,8 +182,9 @@ class VerificationHandler(Generic[DepsType]):
 #               Workflow Result Builder
 #---------------------------------------------------------
 class WorkflowResultBuilder:
-    def __init__(self, final_results_type: type[FinalResults]) -> None:
+    def __init__(self, agent_type: str, final_results_type: type[FinalResults]) -> None:
         self.llm_settings: LLMSettings = load_settings(key="llm")
+        self._agent_type: str = agent_type
         #-------------------------------------
         # Result agent
         #-------------------------------------
@@ -200,7 +201,6 @@ class WorkflowResultBuilder:
         execution_time: float,
         success: bool,
         context: AgentContext,
-        agent_type: str,
     ) -> WorkflowResult:
         """Generate final workflow result"""
         completed: list[Checkpoint] = [
@@ -217,7 +217,6 @@ class WorkflowResultBuilder:
                                                                                     completed=completed, 
                                                                                     failed=failed, 
                                                                                     memory=context.memory,
-                                                                                    agent_type=agent_type,
                                                                                     checkpoint_objects=context.checkpoint_objects)
         except Exception as e:
             final_result = FinalResults() # With default None values
@@ -229,7 +228,7 @@ class WorkflowResultBuilder:
         return WorkflowResult(
             success=success,
             session_id=session_id,
-            workflow_type=agent_type,
+            workflow_type=self._agent_type,
             final_state=context.state.workflow_state,
             completed_checkpoints=completed,
             failed_checkpoints=failed,
@@ -246,13 +245,12 @@ class WorkflowResultBuilder:
         completed: list[Checkpoint],
         failed: list[Checkpoint],
         memory: MemoryManager,
-        agent_type: str,
         checkpoint_objects: dict[str,Checkpoint]
     ) -> FinalResults:
         """LLM based executive summary and recommendations"""
         query: str = f"""
         Workflow Summary Context:
-        - Workflow Type: {agent_type}
+        - Workflow Type: {self._agent_type}
         - Success Status: {success}
         - Total Checkpoints: {len(checkpoint_objects)}
         - Completed Checkpoints: {len(completed)}
@@ -571,7 +569,7 @@ class PCBAgent(Generic[DepsType]):
         #-------------------------------------
         # Result Generator
         #-------------------------------------
-        self._workflow_result_builder = WorkflowResultBuilder(final_results_type=final_results_type)
+        self._workflow_result_builder = WorkflowResultBuilder(agent_type=agent_type, final_results_type=final_results_type)
         
     def _build_system_prompt(self) -> str:
         """Basic wrapper for the agent specific system prompt"""
@@ -726,8 +724,7 @@ class PCBAgent(Generic[DepsType]):
                 session_id=session_id,
                 execution_time=execution_time,
                 success=(self.context.state.workflow_state == WorkflowState.COMPLETED),
-                context=self.context,
-                agent_type=self._agent_type,
+                context=self.context
             )
             
         except Exception as e:
@@ -742,8 +739,7 @@ class PCBAgent(Generic[DepsType]):
                 session_id=session_id,
                 execution_time=execution_time,
                 success=False,
-                context=self.context,
-                agent_type=self._agent_type,
+                context=self.context
             )
     
     #--------------------------
