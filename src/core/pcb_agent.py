@@ -16,7 +16,7 @@ import llm_model
 from settings import load_settings, LLMSettings
 from memory_manager import MemoryManager
 from tool_registry import ToolRegistry, get_function_parameters
-from data_models import (AgentState, 
+from data_models import (ActionType, AgentState, 
                         Checkpoint, 
                         AgentAction, 
                         WorkflowResult, 
@@ -418,28 +418,28 @@ class PCBAgent(Generic[DepsType]):
         """Execute the given action and return results"""
         
         try:
-            if action.action_type == "execute_tool":
+            if action.action_type == ActionType.EXECUTE_TOOL:
                 return await self._execute_tool_action(action, deps)
             
-            elif action.action_type == "verify_checkpoint":
+            elif action.action_type == ActionType.VERIFY_CHECKPOINT:
                 return await self._verify_checkpoint_action(action, deps)
             
-            elif action.action_type == "request_human_input":
+            elif action.action_type == ActionType.REQUEST_HUMAN_INPUT:
                 return self._request_human_input_action(action)
             
-            elif action.action_type == "update_context":
+            elif action.action_type == ActionType.UPDATE_CONTEXT:
                 return self._update_context_action(action)
             
-            elif action.action_type == "proceed_to_next":
+            elif action.action_type == ActionType.PROCEED_TO_NEXT:
                 return self._proceed_to_next_checkpoint_action()
             
-            elif action.action_type == "retry_checkpoint":
+            elif action.action_type == ActionType.RETRY_CHECKPOINT:
                 return self._retry_checkpoint_action(action)
             
-            elif action.action_type == "complete_workflow":
+            elif action.action_type == ActionType.COMPLETE_WORKFLOW:
                 return self._complete_workflow_action()
             
-            else:  # analyze
+            else:  # ActionType.ANALYZE
                 return ActionResult(status="analyzed", message=action.reasoning)
         
         except Exception as e:

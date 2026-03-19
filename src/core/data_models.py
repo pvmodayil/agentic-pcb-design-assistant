@@ -4,7 +4,7 @@ from datetime import datetime
 
 from jsonschema import validate, ValidationError
 
-from enum import IntEnum
+from enum import IntEnum, StrEnum
 
 from abc import ABC, abstractmethod
 from pydantic import BaseModel, Field, ConfigDict
@@ -46,18 +46,18 @@ class Checkpoint(BaseModel):
                 self.metadata = {}
             self.metadata.update(metadata)
 
+class ActionType(StrEnum):
+    EXECUTE_TOOL = "execute_tool"
+    VERIFY_CHECKPOINT = "verify_checkpoint"
+    REQUEST_HUMAN_INPUT = "request_human_input"
+    UPDATE_CONTEXT = "update_context"
+    PROCEED_TO_NEXT = "proceed_to_next"
+    RETRY_CHECKPOINT = "retry_checkpoint"
+    COMPLETE_WORKFLOW = "complete_workflow"
+    ANALYZE = "analyze"
 class AgentAction(BaseModel):
     """Structured action that the agent can take"""
-    action_type: Literal[
-        "analyze", 
-        "execute_tool", 
-        "verify_checkpoint", 
-        "request_human_input",
-        "update_context",
-        "proceed_to_next",
-        "retry_checkpoint",
-        "complete_workflow"
-    ] = Field(..., description="Type of action to perform")
+    action_type: ActionType = Field(..., description="Type of action to perform")
     
     # Action-specific data
     checkpoint_name: Optional[str] = Field(default=None)
