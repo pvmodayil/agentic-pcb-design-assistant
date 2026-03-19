@@ -70,7 +70,7 @@ class PCBAgent(Generic[DepsType]):
         final_results_type: type[FinalResults] = FinalResults,
         deps_type: type[DepsType] = NoDeps,
         temperature: Optional[float] = None,
-        human_input_provider: HumanInputProvider = ConsoleInputProvider()) -> None:
+        human_input_provider: Optional[HumanInputProvider] = None) -> None:
         
         self._agent_type: str = agent_type
         self.task: str = task
@@ -97,7 +97,7 @@ class PCBAgent(Generic[DepsType]):
             memory=MemoryManager(agent_type=agent_type),
             tool_registry=tool_registry,
             checkpoint_objects=checkpoint_objects,
-            human_input_provider=human_input_provider
+            human_input_provider=human_input_provider or ConsoleInputProvider()
         )
         
         #-------------------------------------
@@ -277,10 +277,8 @@ class PCBAgent(Generic[DepsType]):
                 session_id=session_id,
                 execution_time=execution_time,
                 success=(self.context.state.workflow_state == WorkflowState.COMPLETED),
-                memory=self.context.memory,
+                context=self.context,
                 agent_type=self._agent_type,
-                checkpoint_objects=self.context.checkpoint_objects,
-                state=self.context.state
             )
             
         except Exception as e:
@@ -295,10 +293,8 @@ class PCBAgent(Generic[DepsType]):
                 session_id=session_id,
                 execution_time=execution_time,
                 success=False,
-                memory=self.context.memory,
+                context=self.context,
                 agent_type=self._agent_type,
-                checkpoint_objects=self.context.checkpoint_objects,
-                state=self.context.state
             )
     
     #--------------------------
@@ -308,7 +304,7 @@ class PCBAgent(Generic[DepsType]):
         """Prepare the query for the next agent iteration"""
         status = action_result.status
         
-        if status == "tool_executed":
+        if status == ActionStatus.TOOL_EXECUTED:
             if action_result.tool_result:
                 self.context.memory.add_to_message_history(
                         MessageFactory.build_tool_return_message(action_result.tool_result)
@@ -316,24 +312,24 @@ class PCBAgent(Generic[DepsType]):
                 return "Tool executed successfully. Proceed to next steps"
             return "Tool executed successfully. But missing tool results. Retry the tool again."
         
-        elif status == "checkpoint_verified":
+        elif status == ActionStatus.CHECKPOINT_VERIFIED:
             if action_result.checkpoint:
                 self.context.memory.on_checkpoint(checkpoint_label=action_result.checkpoint)
             return f"Checkpoint {action_result.checkpoint} verified. Plan and proceed to the next checkpoint."
         
-        elif status == "verification_failed":
+        elif status == ActionStatus.VERIFICATION_FAILED:
             self.context.memory.add_to_message_history(
                     MessageFactory.build_error_messages(action_result)
                     )
             return f"Checkpoint {action_result.checkpoint} verification failed. Please analyze for fixes and retry."
         
-        elif status == "error":
+        elif status == ActionStatus.ERROR:
             self.context.memory.add_to_message_history(
                     MessageFactory.build_error_messages(action_result)
                     )
             return f"Error occurred: {action_result.error_message}. Address this error and retry?"
         
-        elif status == "human_input_received":
+        elif status == ActionStatus.HUMAN_INPUT_RECEIVED:
             self.context.memory.add_to_message_history(
                     MessageFactory.build_human_input_message(action_result)
                     )
@@ -790,40 +786,38 @@ class WorkflowResultBuilder:
         session_id: str,
         execution_time: float,
         success: bool,
-        memory: MemoryManager,
+        context: AgentContext,
         agent_type: str,
-        checkpoint_objects: dict[str,Checkpoint],
-        state: AgentState
     ) -> WorkflowResult:
         """Generate final workflow result"""
         completed: list[Checkpoint] = [
-            cp for cp in checkpoint_objects.values() 
+            cp for cp in context.checkpoint_objects.values() 
             if cp.status == "completed"
         ]
         failed: list[Checkpoint] = [
-            cp for cp in checkpoint_objects.values() 
+            cp for cp in context.checkpoint_objects.values() 
             if cp.status == "failed"
         ]
         
         final_result: FinalResults = await self._generate_llm_summary_and_results(success=success, 
                                                                                   completed=completed, 
                                                                                   failed=failed, 
-                                                                                  memory=memory,
+                                                                                  memory=context.memory,
                                                                                   agent_type=agent_type,
-                                                                                  checkpoint_objects=checkpoint_objects)
+                                                                                  checkpoint_objects=context.checkpoint_objects)
         
         return WorkflowResult(
             success=success,
             session_id=session_id,
             workflow_type=agent_type,
-            final_state=state.workflow_state,
+            final_state=context.state.workflow_state,
             completed_checkpoints=completed,
             failed_checkpoints=failed,
             results=final_result,
             recommendations=final_result.recommendations,
             summary=final_result.design_summary,
             total_execution_time=execution_time,
-            errors=state.errors
+            errors=context.state.errors
         )
         
     async def _generate_llm_summary_and_results(
