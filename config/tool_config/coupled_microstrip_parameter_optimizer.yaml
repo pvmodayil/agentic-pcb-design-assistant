@@ -1,0 +1,50 @@
+model:
+  onnx_path: "coupled_microstrip_impedance_predictor_ann.onnx"
+  normalization:
+    min_values: [50.0, 50.0, 50.0, 5.0, 2.0]  # w, h, s, t, er (min)
+    max_values: [500.0, 500.0, 3000.0, 50.0, 6.0] # w, h, s, t, er (max)
+
+optimization:
+  convergence_threshold: 3.0  # percent error between optimized BEM-simulated Zdiff vs. Zdiff_target (PRIMARY success criterion)
+  model_accuracy_threshold: 3.0  #  percent error between optimized ML result vs. Zdiff_target (SECONDARY criterion)
+
+input_parameters:
+  target_zdiff_ohms:
+    type: "number"
+    description: "Target differential impedance"
+    required: True
+    min: 50.0
+    max: 200.0
+
+  spacing_range_um:
+    type: "array"
+    description: "Custom spacing range [min, max] in µm. Example: [100, 500] to optimize spacing between 100-500µm."
+    required: False
+ 
+  trace_spacing_um:
+    type: "number"
+    description: "Edge-to-edge spacing in micrometers. Leave null to optimize"
+    required: False
+    min: 50.0
+    max: 3000.0
+  
+  height_um:
+    type: "number"
+    description: "Dielectric height. Leave null to optimize."
+    required: False
+    min: 50.0
+    max: 500.0 
+  
+  thickness_um:
+    type: "number"
+    description: "Copper thickness in micrometers. Leave null to optimize"
+    required: False
+    min: 5.0
+    max: 50.0
+
+  dielectric_constant:
+    type: "number"
+    description: "PCB dielectric constant (Er). Leave null to optimize."
+    required: False
+    min: 2.0
+    max: 6.0  

@@ -4,7 +4,7 @@ from pydantic_ai.messages import (ModelMessage,
                                   UserPromptPart, 
                                   ThinkingPart)
 
-from pydantic import BaseModel, Field
+from dataclasses import dataclass, field
 from loguru import logger
 import asyncio
 
@@ -17,7 +17,8 @@ from data_models import Summary
 #------------------------------------------
 # Memory State
 #------------------------------------------
-class MemoryState(BaseModel):
+@dataclass
+class MemoryState():
     """
     Holds the two-layer memory:
 
@@ -29,8 +30,8 @@ class MemoryState(BaseModel):
                       frozen_summary (None if idle).
     """
     frozen_summary: str = ""
-    live_tail: list[ModelMessage] = Field(default_factory=list)
-    _pending_task: asyncio.Task | None = Field(default=None, repr=False)
+    live_tail: list[ModelMessage] = field(default_factory=list)
+    _pending_task: asyncio.Task | None = field(default=None, repr=False)
 
 #------------------------------------------
 # Memory Agent (Think about this more)
@@ -107,7 +108,7 @@ class MemoryManager:
             Produce an updated compact memory state (<=200 words) from the message history following the system prompt rules.
             """
         try:
-            result = await self._mem_agent.run(user_prompt=prompt, message_history=live_tail_snapshot)
+            result: AgentRunResult[str] = await self._mem_agent.run(user_prompt=prompt, message_history=live_tail_snapshot)
             self._memory_state.frozen_summary = self._extract_text(result)
             logger.debug(f"MemoryManager: compression done for checkpoint {checkpoint_label}.")
         except Exception:
@@ -180,7 +181,29 @@ class MemoryManager:
                 f"MemoryManager: tail hit hard limit {self.TAIL_HARD_LIMIT}; forcing background compression."
             )
             self._trigger_compression(checkpoint_label="[auto-flush]")
-        
+    
+    def clear(self) -> None:
+        """
+        Reset all stored memory state.
+
+        This is used when restarting a workflow, ensuring that no prior
+        conversation context (frozen summary, live tail, or pending compression
+        tasks) leaks into the next run.
+        """
+        # Cancel any in-progress background compression task.
+        if self._memory_state._pending_task and not self._memory_state._pending_task.done():
+            try:
+                self._memory_state._pending_task.cancel()
+            except Exception:
+                logger.exception("MemoryManager: failed to cancel pending compression task")
+            finally:
+                self._memory_state._pending_task = None
+
+        # Clear existing memory state without replacing the object
+        self._memory_state.frozen_summary = ""
+        self._memory_state.live_tail.clear()
+        self.message_history.clear()
+
 class SummaryAgent:
     def __init__(self, temperature: float = 0.1) -> None:
         self.agent = Agent(
