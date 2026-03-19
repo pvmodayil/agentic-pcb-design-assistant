@@ -827,7 +827,7 @@ class PCBAgent(Generic[DepsType]):
         action_result: ActionResult
     ) -> None:
         """Update agent state based on action result"""
-        status = action_result.status
+        status: ActionStatus = action_result.status
         
         if status == ActionStatus.ERROR:
             self.context.state.errors.append(action_result.error_message if action_result.error_message else "No error message was provided")
