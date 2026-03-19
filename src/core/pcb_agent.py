@@ -53,11 +53,13 @@ class NoDeps:
 
 class PCBAgent(Generic[DepsType]):
     """
-    Base abstract class for all PCB Agents. 
-    This provides the core infrastructure with flexibility 
-    for domain specific modifications.
+    PCBAgent
+    -------------
+    An agentic workflow orchestrator for PCB design based on Checkpoints.
+    A predefined list of checkpoints of type Checkpoint is provided, which
+    are then individually analyzed and necessary steps/action taken following the
+    structured output of AgentAction type. 
     """
-    
     def __init__(
         self, 
         agent_type: str,
@@ -371,20 +373,23 @@ class PCBAgent(Generic[DepsType]):
         """Update agent state based on action result"""
         status = action_result.status
         
-        if status == "error":
+        if status == ActionStatus.ERROR:
             self.context.state.errors.append(action_result.error_message if action_result.error_message else "No error message was provided")
             self.context.state.workflow_state = WorkflowState.ERROR
         
-        elif status == "verification_failed":
+        elif status == ActionStatus.VERIFICATION_FAILED:
             self.context.state.errors.append(action_result.error_message if action_result.error_message else "No error message was provided")
             self.context.state.workflow_state = WorkflowState.TEST_FAILED
         
-        elif status == "checkpoint_verified":
+        elif status == ActionStatus.CHECKPOINT_VERIFIED:
             self.context.state.workflow_state = WorkflowState.TEST_PASSED
         
-        elif status == "workflow_completed":
+        elif status == ActionStatus.WORKFLOW_COMPLETED:
             self.context.state.workflow_state = WorkflowState.COMPLETED
     
+    #--------------------------
+    # Check before resume
+    #--------------------------
     def _should_terminate(self) -> bool:
         """Check if workflow should terminate"""
         terminal_states = {
