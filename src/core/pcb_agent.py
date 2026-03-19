@@ -1,4 +1,4 @@
-from typing import Protocol, TypeVar, Generic, Any, Optional, runtime_checkable
+from typing import Awaitable, Callable, TypeVar, Generic, Any, Optional
 from dataclasses import dataclass
 
 import uuid
@@ -27,19 +27,7 @@ from data_models import (ActionStatus, ActionType, AgentState,
                         ParameterGather,
                         VerificationResult)
 
-#---------------------------------------------------------
-#                     Human Input
-#---------------------------------------------------------
-@runtime_checkable
-class HumanInputProvider(Protocol):
-    def get_input(self, question: str) -> str: ...
-
-class ConsoleInputProvider:
-    def get_input(self, question: str) -> str:
-        try:
-            return input(f"\n{question}\n> ")
-        except Exception:
-            return ""
+from input import HumanInputProvider, ConsoleInputProvider
         
 #---------------------------------------------------------
 #                    Agent Context
@@ -79,29 +67,36 @@ class PCBAgent(Generic[DepsType]):
         max_checkpoint_retries: Optional[int] = None,
         final_results_type: type[FinalResults] = FinalResults,
         deps_type: type[DepsType] = NoDeps,
-        temperature: Optional[float] = None) -> None:
+        temperature: Optional[float] = None,
+        human_input_provider: HumanInputProvider = ConsoleInputProvider()) -> None:
         
         self._agent_type: str = agent_type
         self.task: str = task
         
         #-------------------------------------
-        # State management
+        # State Init
         #-------------------------------------
-        self.state = AgentState(
+        state = AgentState(
             pending_checkpoints=[checkpoint.name for checkpoint in list_checkpoints],
         )
         if max_checkpoint_retries:
-            self.state.max_retries = max_checkpoint_retries
+            state.max_retries = max_checkpoint_retries
         
-        self.checkpoint_objects: dict[str, Checkpoint] = {
+        checkpoint_objects: dict[str, Checkpoint] = {
             checkpoint.name: checkpoint
             for checkpoint in list_checkpoints
         }
         
         #-------------------------------------
-        # Tool management
+        # Context
         #-------------------------------------
-        self.tool_registry: ToolRegistry = tool_registry
+        self.context = AgentContext(
+            state=state,
+            memory=MemoryManager(agent_type=agent_type),
+            tool_registry=tool_registry,
+            checkpoint_objects=checkpoint_objects,
+            human_input_provider=human_input_provider
+        )
         
         #-------------------------------------
         # Create main agent
@@ -117,16 +112,10 @@ class PCBAgent(Generic[DepsType]):
             output_type=AgentAction,
             system_prompt=system_prompt
         )
-        
         #-------------------------------------
-        # Memory manager
+        # Action Handler
         #-------------------------------------
-        self.memory = MemoryManager(agent_type=agent_type)
-        
-        #-------------------------------------
-        # Verification
-        #-------------------------------------
-        self._verification_handler: VerificationHandler[DepsType] = VerificationHandler(deps_type=deps_type)
+        self._action_handler: ActionHandler[DepsType] = ActionHandler(deps_type=deps_type)
         
         #-------------------------------------
         # Result Generator
@@ -136,7 +125,7 @@ class PCBAgent(Generic[DepsType]):
     def _build_system_prompt(self) -> str:
         """Basic wrapper for the agent specific system prompt"""
         
-        tool_descriptions: str = self.tool_registry.get_tool_descriptions()
+        tool_descriptions: str = self.context.tool_registry.get_tool_descriptions()
         
         system_prompt: str = f"""
         You are an expert '{self._agent_type}' agent engaged in the PCB design workflow with the given task/goal.
@@ -185,30 +174,30 @@ class PCBAgent(Generic[DepsType]):
         Clears all state, memory, checkpoint statuses, and tool results.
         """
         # Reset AgentState completely
-        self.state.version += 1
-        self.state.workflow_state = WorkflowState.INITIAL
-        self.state.current_checkpoint = None
-        self.state.completed_checkpoints = []
-        self.state.pending_checkpoints = [checkpoint.name for checkpoint in self.checkpoint_objects.values()]
+        self.context.state.version += 1
+        self.context.state.workflow_state = WorkflowState.INITIAL
+        self.context.state.current_checkpoint = None
+        self.context.state.completed_checkpoints = []
+        self.context.state.pending_checkpoints = [checkpoint.name for checkpoint in self.context.checkpoint_objects.values()]
         
-        self.state.context_data = {}
-        self.state.tool_results = None
+        self.context.state.context_data = {}
+        self.context.state.tool_results = None
         
-        self.state.needs_human_input = False
-        self.state.human_question = None
-        self.state.human_response = None
+        self.context.state.needs_human_input = False
+        self.context.state.human_question = None
+        self.context.state.human_response = None
         
-        self.state.errors = []
-        self.state.retry_count = 0
+        self.context.state.errors = []
+        self.context.state.retry_count = 0
         # max_retries not touched as it is what we got from init
         
         # Reset checkpoint statuses to "pending"
-        for checkpoint in self.checkpoint_objects.values():
+        for checkpoint in self.context.checkpoint_objects.values():
             checkpoint.status = "pending"
             checkpoint.error_message = None
         
         # Clear memory completely
-        self.memory.clear()
+        self.context.memory.clear()
 
         logger.info(f"{self._agent_type} agent reset complete - ready for fresh run")
         
@@ -236,16 +225,16 @@ class PCBAgent(Generic[DepsType]):
         step_count = 0
         
         try:
-            while (step_count < max_steps) and (self.state.retry_count < self.state.max_retries) :
+            while (step_count < max_steps) and (self.context.state.retry_count < self.context.state.max_retries) :
                 step_count += 1
-                logger.info(f"Step {step_count}: State={self.state.workflow_state.name}")
+                logger.info(f"Step {step_count}: State={self.context.state.workflow_state.name}")
                 
                 # Check termination conditions
                 if self._should_terminate():
                     break
                 
                 # Get relevant context
-                relevant_message_history: list[ModelMessage] = self.memory.get_context(
+                relevant_message_history: list[ModelMessage] = self.context.memory.get_context(
                     query=current_query,
                 )
                 
@@ -257,7 +246,7 @@ class PCBAgent(Generic[DepsType]):
                 )
                 
                 # Update memory
-                self.memory.add_to_message_history(result.new_messages())
+                self.context.memory.add_to_message_history(result.new_messages())
                 
                 # Extract action
                 action: AgentAction = result.output
@@ -267,7 +256,9 @@ class PCBAgent(Generic[DepsType]):
                             Reason: {action.reasoning}""")
                 
                 # Execute action
-                action_result: ActionResult = await self._execute_action(action, deps)
+                action_result: ActionResult = await self._action_handler.execute(action=action,
+                                                                                 context=self.context,
+                                                                                 deps=deps)
                 
                 # Update state based on result
                 self._update_state_from_action_result(action_result)
@@ -279,33 +270,33 @@ class PCBAgent(Generic[DepsType]):
             end_time: datetime = datetime.now()
             execution_time: float = (end_time - start_time).total_seconds()
             
-            await self.memory.flush() # Wait for pending summarisation tasks
+            await self.context.memory.flush() # Wait for pending summarisation tasks
             return await self._workflow_result_builder.generate_workflow_result(
                 session_id=session_id,
                 execution_time=execution_time,
-                success=(self.state.workflow_state == WorkflowState.COMPLETED),
-                memory=self.memory,
+                success=(self.context.state.workflow_state == WorkflowState.COMPLETED),
+                memory=self.context.memory,
                 agent_type=self._agent_type,
-                checkpoint_objects=self.checkpoint_objects,
-                state=self.state
+                checkpoint_objects=self.context.checkpoint_objects,
+                state=self.context.state
             )
             
         except Exception as e:
             logger.error(f"Workflow error: {e}", exc_info=True)
-            self.state.workflow_state = WorkflowState.ERROR
-            self.state.errors.append(str(e))
+            self.context.state.workflow_state = WorkflowState.ERROR
+            self.context.state.errors.append(str(e))
             
             end_time: datetime = datetime.now()
             execution_time: float = (end_time - start_time).total_seconds()
-            await self.memory.flush() # Wait for pending summarisation tasks
+            await self.context.memory.flush() # Wait for pending summarisation tasks
             return await self._workflow_result_builder.generate_workflow_result(
                 session_id=session_id,
                 execution_time=execution_time,
                 success=False,
-                memory=self.memory,
+                memory=self.context.memory,
                 agent_type=self._agent_type,
-                checkpoint_objects=self.checkpoint_objects,
-                state=self.state
+                checkpoint_objects=self.context.checkpoint_objects,
+                state=self.context.state
             )
     
     #--------------------------
@@ -317,7 +308,7 @@ class PCBAgent(Generic[DepsType]):
         
         if status == "tool_executed":
             if action_result.tool_result:
-                self.memory.add_to_message_history(
+                self.context.memory.add_to_message_history(
                         MessageFactory.build_tool_return_message(action_result.tool_result)
                         )
                 return "Tool executed successfully. Proceed to next steps"
@@ -325,23 +316,23 @@ class PCBAgent(Generic[DepsType]):
         
         elif status == "checkpoint_verified":
             if action_result.checkpoint:
-                self.memory.on_checkpoint(checkpoint_label=action_result.checkpoint)
+                self.context.memory.on_checkpoint(checkpoint_label=action_result.checkpoint)
             return f"Checkpoint {action_result.checkpoint} verified. Plan and proceed to the next checkpoint."
         
         elif status == "verification_failed":
-            self.memory.add_to_message_history(
+            self.context.memory.add_to_message_history(
                     MessageFactory.build_error_messages(action_result)
                     )
             return f"Checkpoint {action_result.checkpoint} verification failed. Please analyze for fixes and retry."
         
         elif status == "error":
-            self.memory.add_to_message_history(
+            self.context.memory.add_to_message_history(
                     MessageFactory.build_error_messages(action_result)
                     )
             return f"Error occurred: {action_result.error_message}. Address this error and retry?"
         
         elif status == "human_input_received":
-            self.memory.add_to_message_history(
+            self.context.memory.add_to_message_history(
                     MessageFactory.build_human_input_message(action_result)
                     )
             return "Based on the response from the user proceed to next steps."
@@ -353,23 +344,23 @@ class PCBAgent(Generic[DepsType]):
     #--------------------------
     def _get_workflow_state_info(self) -> str:
         """Get state info regarding checkpoints"""
-        if self.state.current_checkpoint:
-            current_cp_metadata: dict[str, Any] | None = self.checkpoint_objects[self.state.current_checkpoint].metadata
+        if self.context.state.current_checkpoint:
+            current_cp_metadata: dict[str, Any] | None = self.context.checkpoint_objects[self.context.state.current_checkpoint].metadata
             metadata_str = "No metadata" if current_cp_metadata is None else json.dumps(current_cp_metadata, indent=2, ensure_ascii=False)
             return f"""
             **Current Workflow State**:
-            - Current checkpoint: {self.state.current_checkpoint}
-            - Checkpoint description: {self.checkpoint_objects[self.state.current_checkpoint].description}
+            - Current checkpoint: {self.context.state.current_checkpoint}
+            - Checkpoint description: {self.context.checkpoint_objects[self.context.state.current_checkpoint].description}
             - Checkpoint metadata: {metadata_str}
-            - Completed checkpoints: {', '.join(self.state.completed_checkpoints) if self.state.completed_checkpoints else "None"}
-            - Pending checkpoints: {', '.join(self.state.pending_checkpoints) if self.state.pending_checkpoints else "None"}
+            - Completed checkpoints: {', '.join(self.context.state.completed_checkpoints) if self.context.state.completed_checkpoints else "None"}
+            - Pending checkpoints: {', '.join(self.context.state.pending_checkpoints) if self.context.state.pending_checkpoints else "None"}
             """
     
         return f"""
         **Current Workflow State**:
         - Current checkpoint: Not started
-        - Completed checkpoints: {', '.join(self.state.completed_checkpoints) if self.state.completed_checkpoints else "None"}
-        - Pending checkpoints: {', '.join(self.state.pending_checkpoints) if self.state.pending_checkpoints else "None"}
+        - Completed checkpoints: {', '.join(self.context.state.completed_checkpoints) if self.context.state.completed_checkpoints else "None"}
+        - Pending checkpoints: {', '.join(self.context.state.pending_checkpoints) if self.context.state.pending_checkpoints else "None"}
         \n           
         """
         
@@ -381,61 +372,78 @@ class PCBAgent(Generic[DepsType]):
         status = action_result.status
         
         if status == "error":
-            self.state.errors.append(action_result.error_message if action_result.error_message else "No error message was provided")
-            self.state.workflow_state = WorkflowState.ERROR
+            self.context.state.errors.append(action_result.error_message if action_result.error_message else "No error message was provided")
+            self.context.state.workflow_state = WorkflowState.ERROR
         
         elif status == "verification_failed":
-            self.state.errors.append(action_result.error_message if action_result.error_message else "No error message was provided")
-            self.state.workflow_state = WorkflowState.TEST_FAILED
+            self.context.state.errors.append(action_result.error_message if action_result.error_message else "No error message was provided")
+            self.context.state.workflow_state = WorkflowState.TEST_FAILED
         
         elif status == "checkpoint_verified":
-            self.state.workflow_state = WorkflowState.TEST_PASSED
+            self.context.state.workflow_state = WorkflowState.TEST_PASSED
         
         elif status == "workflow_completed":
-            self.state.workflow_state = WorkflowState.COMPLETED
+            self.context.state.workflow_state = WorkflowState.COMPLETED
     
-    #--------------------------
-    # Action Handling
-    #--------------------------    
-    async def _execute_action(
-        self, 
-        action: AgentAction, 
-        deps: DepsType
+    def _should_terminate(self) -> bool:
+        """Check if workflow should terminate"""
+        terminal_states = {
+            WorkflowState.COMPLETED,
+            WorkflowState.PARTIAL_SUCCESS,
+            WorkflowState.ERROR
+        }
+        return self.context.state.workflow_state in terminal_states
+
+#------------------------------------------
+#            Action Handler
+#------------------------------------------
+# The uniform signature every handler must match
+type HandlerFn[DepsType] = Callable[
+    [AgentAction, AgentContext, DepsType],
+    Awaitable[ActionResult]
+]
+class ActionHandler(Generic[DepsType]):
+    def __init__(self, deps_type: type[DepsType] = NoDeps, ) -> None:
+        
+        self._action_dispatch: dict[ActionType, HandlerFn] = {
+        ActionType.EXECUTE_TOOL:        self._execute_tool_action,
+        ActionType.VERIFY_CHECKPOINT:   self._verify_checkpoint_action,
+        ActionType.REQUEST_HUMAN_INPUT: self._request_human_input_action,
+        ActionType.UPDATE_CONTEXT:      self._update_context_action,
+        ActionType.PROCEED_TO_NEXT:     self._proceed_to_next_checkpoint_action,
+        ActionType.RETRY_CHECKPOINT:    self._retry_checkpoint_action,
+        ActionType.COMPLETE_WORKFLOW:   self._complete_workflow_action,
+        }
+        #-------------------------------------
+        # Verification
+        #-------------------------------------
+        self._verification_handler: VerificationHandler[DepsType] = VerificationHandler(deps_type=deps_type)
+    
+    async def execute(
+        self,
+        action: AgentAction,
+        context: AgentContext,
+        deps: DepsType,
     ) -> ActionResult:
-        """Execute the given action and return results"""
+        """Dispatch the handler from dispatch dictionary"""
+        handler: HandlerFn | None = self._action_dispatch.get(action.action_type)
         
+        if handler is None:
+            return ActionResult(status=ActionStatus.ANALYZED, message=action.reasoning)
         try:
-            if action.action_type == ActionType.EXECUTE_TOOL:
-                return await self._execute_tool_action(action, deps)
-            
-            elif action.action_type == ActionType.VERIFY_CHECKPOINT:
-                return await self._verify_checkpoint_action(action, deps)
-            
-            elif action.action_type == ActionType.REQUEST_HUMAN_INPUT:
-                return self._request_human_input_action(action)
-            
-            elif action.action_type == ActionType.UPDATE_CONTEXT:
-                return self._update_context_action(action)
-            
-            elif action.action_type == ActionType.PROCEED_TO_NEXT:
-                return self._proceed_to_next_checkpoint_action()
-            
-            elif action.action_type == ActionType.RETRY_CHECKPOINT:
-                return self._retry_checkpoint_action(action)
-            
-            elif action.action_type == ActionType.COMPLETE_WORKFLOW:
-                return self._complete_workflow_action()
-            
-            else:  # ActionType.ANALYZE
-                return ActionResult(status=ActionStatus.ANALYZED, message=action.reasoning)
-        
+            return await handler(action, context, deps)
         except Exception as e:
             logger.error(f"Action execution error: {e}", exc_info=True)
             return ActionResult(status=ActionStatus.ERROR, error_message=str(e))
-    
+
+    # ------------------------------------------------------------------
+    # Handlers — uniform signature: (action, context, deps) -> ActionResult
+    # Handlers that don't need a param simply ignore it with _
+    # ------------------------------------------------------------------
     async def _execute_tool_action(
         self, 
-        action: AgentAction, 
+        action: AgentAction,
+        context: AgentContext, 
         deps: DepsType
     ) -> ActionResult:
         """Execute a tool and return results"""
@@ -447,9 +455,9 @@ class PCBAgent(Generic[DepsType]):
         if not action.tool_parameters:
             return ActionResult(status=ActionStatus.ERROR, error_message=f"Tool {tool_name} parameters not provided")
         
-        tool_result: ToolResult = await self.tool_registry.handle_tool_call(tool_name=tool_name,
+        tool_result: ToolResult = await context.tool_registry.handle_tool_call(tool_name=tool_name,
                                                                       tool_parameters=action.tool_parameters)
-        self.state.tool_results = tool_result
+        context.state.tool_results = tool_result
         
         if tool_result.error_message:
             return ActionResult(status=ActionStatus.ERROR, error_message=tool_result.error_message)
@@ -459,67 +467,10 @@ class PCBAgent(Generic[DepsType]):
                 tool_result=tool_result,
             )
     
-    def _request_human_input_action(self, action: AgentAction) -> ActionResult:
-        """Handle human input request"""
-        self.state.needs_human_input = True
-        self.state.human_question = action.question_for_human
-        self.state.workflow_state = WorkflowState.AWAITING_HUMAN
-        
-        question: str = action.question_for_human if action.question_for_human else "Failed to generate question. Prompt the agent for its query"
-        human_response: str = self.provide_human_input(question=question)
-        
-        return ActionResult(status=ActionStatus.HUMAN_INPUT_RECEIVED, message=human_response)
-    
-    def _update_context_action(self, action: AgentAction) -> ActionResult:
-        """Update workflow context"""
-        self.state.context_data.update(action.context_updates)
-        return ActionResult(status=ActionStatus.CONTEXT_UPDATED, message=str(action.context_updates))
-    
-    def _proceed_to_next_checkpoint_action(self,) -> ActionResult:
-        """Move to next checkpoint"""
-        if not self.state.pending_checkpoints:
-            self.state.workflow_state = WorkflowState.COMPLETED
-            return ActionResult(status=ActionStatus.WORKFLOW_COMPLETED, message="All checkpoints completed")
-        
-        next_checkpoint = self.state.pending_checkpoints.pop(0) # Removes thge first element
-        self.state.current_checkpoint = next_checkpoint
-        self.checkpoint_objects[next_checkpoint].status = "in_progress"
-        
-        return ActionResult(status=ActionStatus.PROCEED_TO_NEXT, message=f"Next checkpoint {next_checkpoint}")
-    
-    def _retry_checkpoint_action(self, action: AgentAction) -> ActionResult:
-        """Retry current checkpoint"""
-        if not self.state.can_retry():
-            return ActionResult(status=ActionStatus.ERROR, error_message="Maximum retries exceeded")
-        
-        self.state.increment_retry()
-        
-        checkpoint_name = action.checkpoint_name or self.state.current_checkpoint
-        if checkpoint_name and checkpoint_name in self.checkpoint_objects.keys():
-            self.checkpoint_objects[checkpoint_name].status = "in_progress"
-        
-        return ActionResult(status=ActionStatus.RETRY_REQUIRED, checkpoint=checkpoint_name, message=f"retry number {self.state.retry_count}")
-    
-    def _complete_workflow_action(self) -> ActionResult:
-        """Mark workflow as complete"""
-        self.state.workflow_state = WorkflowState.COMPLETED
-        return ActionResult(status=ActionStatus.WORKFLOW_COMPLETED, message="Workflow completed")
-    
-    def _should_terminate(self) -> bool:
-        """Check if workflow should terminate"""
-        terminal_states = {
-            WorkflowState.COMPLETED,
-            WorkflowState.PARTIAL_SUCCESS,
-            WorkflowState.ERROR
-        }
-        return self.state.workflow_state in terminal_states
-    
-    #--------------------------
-    # Verification
-    #--------------------------    
     async def _verify_checkpoint_action(
         self, 
         action: AgentAction, 
+        context: AgentContext,
         deps: DepsType
     ) -> ActionResult:
         """Verify a checkpoint"""
@@ -527,10 +478,10 @@ class PCBAgent(Generic[DepsType]):
         if not checkpoint_name:
             return ActionResult(status=ActionStatus.ERROR, error_message="No checkpoint specified")
         
-        if checkpoint_name not in self.checkpoint_objects.keys():
+        if checkpoint_name not in context.checkpoint_objects.keys():
             return ActionResult(status=ActionStatus.ERROR, error_message=f"Unknown checkpoint: {checkpoint_name}")
         
-        checkpoint: Checkpoint = self.checkpoint_objects[checkpoint_name]
+        checkpoint: Checkpoint = context.checkpoint_objects[checkpoint_name]
         
         # Call domain-specific verification
         if checkpoint.verification_tool_name: # When tool is mentioned with the checkpoint
@@ -541,18 +492,20 @@ class PCBAgent(Generic[DepsType]):
                                     error_message=f"""Given {action.tool_name} is not matching with 
                                     the checkpoint verification tool {checkpoint.verification_tool_name}""")
     
-            tool_action_result: ActionResult = await self._execute_tool_action(action, deps)
-            self.memory.add_to_message_history(
-                        self._build_tool_return_message(tool_action_result.tool_result) # type: ignore
-                        ) # Add tool call results to memory
+            tool_action_result: ActionResult = await self._execute_tool_action(action, context, deps)
+            # Add the tool result to memory if it exists. 
+            if tool_action_result.tool_result:
+                context.memory.add_to_message_history(
+                        MessageFactory.build_tool_return_message(tool_action_result.tool_result) 
+                        ) 
         try:
             if checkpoint.verification_strategy == "analytical":    
                 error_messages: Optional[str] = await self._verification_handler.verify_checkpoint_with_llm(checkpoint=checkpoint, 
-                                                                                                             memory=self.memory,
+                                                                                                             memory=context.memory,
                                                                                                              deps=deps)
             else: # startegy == "heuristics"
                 error_messages: Optional[str] = await self._verification_handler.verify_checkpoint_with_heuristics(checkpoint=checkpoint, 
-                                                                                                             memory=self.memory,
+                                                                                                             memory=context.memory,
                                                                                                              deps=deps)
         except Exception as e:
             logger.exception(f"Exception encountered while verifying Checkpoint: {checkpoint_name}")
@@ -560,35 +513,73 @@ class PCBAgent(Generic[DepsType]):
         
         if not error_messages:
             checkpoint.mark_completed()
-            self.state.completed_checkpoints.append(checkpoint_name)
+            context.state.completed_checkpoints.append(checkpoint_name)
             return ActionResult(status=ActionStatus.CHECKPOINT_VERIFIED, checkpoint=checkpoint_name)
         else:
             checkpoint.mark_failed("Verification failed")
             return ActionResult(status=ActionStatus.VERIFICATION_FAILED, checkpoint=checkpoint_name, error_message=error_messages)
-    
-    #--------------------------
-    # Incorporate with UI
-    #--------------------------
-    def provide_human_input(self, question: str) -> str:
-        """Provide human response and resume workflow"""
-        # TODO: Later integrate with UI for more sophisticated input handling
-        try:
-            # Prompt user for input via console
-            response: str = input(f"\n{question}\n> ")
-            
-            # Update state with response
-            self.state.human_response = response
-            self.state.needs_human_input = False
-            self.state.workflow_state = WorkflowState.HUMAN_RESPONDED
-            logger.info(f"Human input received: {response}")
-            
-            return response
-        except Exception as e:
-            logger.error(f"Error getting human input: {e}")
-            self.state.needs_human_input = False
-            self.state.workflow_state = WorkflowState.HUMAN_RESPONDED
-            return ""
+
+    async def _request_human_input_action(self, 
+                                    action: AgentAction,
+                                    context: AgentContext, 
+                                    deps: DepsType) -> ActionResult:
+        """Handle human input request"""
+        context.state.needs_human_input = True
+        context.state.human_question = action.question_for_human
+        context.state.workflow_state = WorkflowState.AWAITING_HUMAN
         
+        question: str = action.question_for_human if action.question_for_human else "Failed to generate question. Prompt the agent for its query"
+        human_response: str = await context.human_input_provider.get_input(question=question)
+        
+        return ActionResult(status=ActionStatus.HUMAN_INPUT_RECEIVED, message=human_response)
+    
+    async def _update_context_action(self, 
+                               action: AgentAction,
+                               context: AgentContext, 
+                               deps: DepsType) -> ActionResult:
+        """Update workflow context"""
+        context.state.context_data.update(action.context_updates)
+        return ActionResult(status=ActionStatus.CONTEXT_UPDATED, message=str(action.context_updates))
+    
+    async def _proceed_to_next_checkpoint_action(self, 
+                                                 action: AgentAction,
+                                                 context: AgentContext,
+                                                 deps: DepsType) -> ActionResult:
+        """Move to next checkpoint"""
+        if not context.state.pending_checkpoints:
+            context.state.workflow_state = WorkflowState.COMPLETED
+            return ActionResult(status=ActionStatus.WORKFLOW_COMPLETED, message="All checkpoints completed")
+        
+        next_checkpoint = context.state.pending_checkpoints.pop(0) # Removes thge first element
+        context.state.current_checkpoint = next_checkpoint
+        context.checkpoint_objects[next_checkpoint].status = "in_progress"
+        
+        return ActionResult(status=ActionStatus.PROCEED_TO_NEXT, message=f"Next checkpoint {next_checkpoint}")
+    
+    async def _retry_checkpoint_action(self, 
+                                 action: AgentAction,
+                                 context: AgentContext,
+                                 deps: DepsType) -> ActionResult:
+        """Retry current checkpoint"""
+        if not context.state.can_retry():
+            return ActionResult(status=ActionStatus.ERROR, error_message="Maximum retries exceeded")
+        
+        context.state.increment_retry()
+        
+        checkpoint_name = action.checkpoint_name or context.state.current_checkpoint
+        if checkpoint_name and checkpoint_name in context.checkpoint_objects.keys():
+            context.checkpoint_objects[checkpoint_name].status = "in_progress"
+        
+        return ActionResult(status=ActionStatus.RETRY_REQUIRED, checkpoint=checkpoint_name, message=f"retry number {context.state.retry_count}")
+    
+    async def _complete_workflow_action(self, 
+                                  action: AgentAction,
+                                  context: AgentContext,
+                                  deps: DepsType) -> ActionResult:
+        """Mark workflow as complete"""
+        context.state.workflow_state = WorkflowState.COMPLETED
+        return ActionResult(status=ActionStatus.WORKFLOW_COMPLETED, message="Workflow completed")
+
 #------------------------------------------
 #             Message Builder
 #------------------------------------------
@@ -641,10 +632,6 @@ class MessageFactory:
                 )]
             )
         return [human_input_message]
-    
-#------------------------------------------
-#            Action Handler
-#------------------------------------------
     
 #------------------------------------------
 #          Verification Handler
@@ -777,6 +764,9 @@ class VerificationHandler(Generic[DepsType]):
         
         return result.output.parameters
 
+#------------------------------------------
+#          Result Builder
+#------------------------------------------
 class WorkflowResultBuilder:
     def __init__(self, final_results_type: type[FinalResults]) -> None:
         self.llm_settings: LLMSettings = load_settings(key="llm")
