@@ -27,7 +27,7 @@ from data_models import (ActionStatus, ActionType, AgentState,
                         Summary)
 
 from message_builder import MessageFactory
-from input import HumanInputProvider, ConsoleInputProvider
+from src.protocols.input_protocol import HumanInputProvider, ConsoleInputProvider
         
 #---------------------------------------------------------
 #                    Agent Context

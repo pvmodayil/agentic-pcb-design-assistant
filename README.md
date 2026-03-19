@@ -38,19 +38,22 @@ This project implements a sophisticated agentic framework for automating PCB des
 ```
 config/         # Configuration files
 src/
-├── core/              # Core agent implementation
-│   ├── pcb_agent.py    # Base agent class
-│   ├── tool_registry.py # Tool management
-│   ├── mcp_server_builder.py # MCP integration
-│   ├── memory_manager.py # Memory management
-│   ├── llm_model.py    # LLM configuration
-│   ├── data_models.py  # Pydantic models
-├── agents/             # Subagents
-├── infrastructure/     # Infrastructure utilities
-├── orchestrator/       # Workflow orchestration
-├── protocols/          # Protocol definitions
-├── tools/              # Tool implementations
-└── utils/              # Utility functions
+├── core/                           # Core agent implementation
+│   ├── pcb_agent.py                # Base agent class
+│   ├── tool_registry.py            # Tool management
+│   ├── mcp_server_builder.py       # MCP integration
+│   ├── memory_manager.py           # Memory management
+│   ├── llm_model.py                # LLM configuration
+│   ├── data_models.py              # Pydantic models
+│   ├── message_builder.py          # Static methods for building messages
+│   ├── settings.py                 # load settings from config file
+├── agents/                         # Subagents
+├── infrastructure/                 # Infrastructure utilities
+├── orchestrator/                   # Workflow orchestration
+├── protocols/                      # Protocol definitions
+│   ├── input_protocol.py           # Input protocols
+├── tools/                          # Tool implementations
+└── utils/                          # Utility functions
 ```
 
 ## Getting Started
