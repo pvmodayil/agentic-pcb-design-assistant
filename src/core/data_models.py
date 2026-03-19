@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Optional, Literal, Any, Callable, Awaitable, Protocol, runtime_checkable
+from typing import Optional, Literal, Any, Callable, Awaitable
 from datetime import datetime
 
 from jsonschema import validate, ValidationError
@@ -9,9 +9,6 @@ from enum import IntEnum
 from abc import ABC, abstractmethod
 from pydantic import BaseModel, Field, ConfigDict
 from loguru import logger
-
-from src.core.memory_manager import MemoryManager
-from src.core.tool_registry import ToolRegistry
 
 #---------------------------------------------------------
 #                     Agent & Workflow
