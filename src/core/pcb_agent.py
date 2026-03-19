@@ -83,7 +83,6 @@ class PCBAgent(Generic[DepsType]):
         
         self._agent_type: str = agent_type
         self.task: str = task
-        self._final_results_type: type[FinalResults] = final_results_type
         
         #-------------------------------------
         # State management
@@ -130,14 +129,9 @@ class PCBAgent(Generic[DepsType]):
         self._verification_handler: VerificationHandler[DepsType] = VerificationHandler(deps_type=deps_type)
         
         #-------------------------------------
-        # Result agent
+        # Result Generator
         #-------------------------------------
-        self._result_agent: Agent[None, FinalResults] = Agent(
-            model=llm_model.get_llm_model(self.llm_settings),
-            model_settings=ModelSettings(temperature=0.1),
-            output_type=self._final_results_type,
-            instructions="Based on the workflow execution, please generate the final results following the required structure."
-        )
+        self._workflow_result_builder = WorkflowResultBuilder(final_results_type=final_results_type)
         
     def _build_system_prompt(self) -> str:
         """Basic wrapper for the agent specific system prompt"""
@@ -286,10 +280,14 @@ class PCBAgent(Generic[DepsType]):
             execution_time: float = (end_time - start_time).total_seconds()
             
             await self.memory.flush() # Wait for pending summarisation tasks
-            return await self._generate_workflow_result(
-                session_id,
-                execution_time,
-                success=(self.state.workflow_state == WorkflowState.COMPLETED)
+            return await self._workflow_result_builder.generate_workflow_result(
+                session_id=session_id,
+                execution_time=execution_time,
+                success=(self.state.workflow_state == WorkflowState.COMPLETED),
+                memory=self.memory,
+                agent_type=self._agent_type,
+                checkpoint_objects=self.checkpoint_objects,
+                state=self.state
             )
             
         except Exception as e:
@@ -300,10 +298,14 @@ class PCBAgent(Generic[DepsType]):
             end_time: datetime = datetime.now()
             execution_time: float = (end_time - start_time).total_seconds()
             await self.memory.flush() # Wait for pending summarisation tasks
-            return await self._generate_workflow_result(
-                session_id,
-                execution_time,
-                success=False
+            return await self._workflow_result_builder.generate_workflow_result(
+                session_id=session_id,
+                execution_time=execution_time,
+                success=False,
+                memory=self.memory,
+                agent_type=self._agent_type,
+                checkpoint_objects=self.checkpoint_objects,
+                state=self.state
             )
     
     #--------------------------
@@ -545,11 +547,11 @@ class PCBAgent(Generic[DepsType]):
                         ) # Add tool call results to memory
         try:
             if checkpoint.verification_strategy == "analytical":    
-                error_messages: Optional[str] = await self._verification_handler._verify_checkpoint_with_llm(checkpoint=checkpoint, 
+                error_messages: Optional[str] = await self._verification_handler.verify_checkpoint_with_llm(checkpoint=checkpoint, 
                                                                                                              memory=self.memory,
                                                                                                              deps=deps)
             else: # startegy == "heuristics"
-                error_messages: Optional[str] = await self._verification_handler._verify_checkpoint_with_heuristics(checkpoint=checkpoint, 
+                error_messages: Optional[str] = await self._verification_handler.verify_checkpoint_with_heuristics(checkpoint=checkpoint, 
                                                                                                              memory=self.memory,
                                                                                                              deps=deps)
         except Exception as e:
@@ -563,106 +565,6 @@ class PCBAgent(Generic[DepsType]):
         else:
             checkpoint.mark_failed("Verification failed")
             return ActionResult(status=ActionStatus.VERIFICATION_FAILED, checkpoint=checkpoint_name, error_message=error_messages)
-        
-    #--------------------------
-    # Result
-    #--------------------------
-    async def _generate_workflow_result(
-        self, 
-        session_id: str,
-        execution_time: float,
-        success: bool
-    ) -> WorkflowResult:
-        """Generate final workflow result"""
-        completed: list[Checkpoint] = [
-            cp for cp in self.checkpoint_objects.values() 
-            if cp.status == "completed"
-        ]
-        failed: list[Checkpoint] = [
-            cp for cp in self.checkpoint_objects.values() 
-            if cp.status == "failed"
-        ]
-        
-        final_result: FinalResults = await self._generate_llm_summary_and_results(success, completed, failed)
-        
-        return WorkflowResult(
-            success=success,
-            session_id=session_id,
-            workflow_type=self._agent_type,
-            final_state=self.state.workflow_state,
-            completed_checkpoints=completed,
-            failed_checkpoints=failed,
-            results=final_result,
-            recommendations=final_result.recommendations,
-            summary=final_result.design_summary,
-            total_execution_time=execution_time,
-            errors=self.state.errors
-        )
-        
-    async def _generate_llm_summary_and_results(
-        self, 
-        success: bool, 
-        completed: list[Checkpoint],
-        failed: list[Checkpoint]
-    ) -> FinalResults:
-        """LLM based executive summary and recommendations"""
-        query: str = f"""
-        Workflow Summary Context:
-        - Workflow Type: {self._agent_type}
-        - Success Status: {success}
-        - Total Checkpoints: {len(self.checkpoint_objects)}
-        - Completed Checkpoints: {len(completed)}
-        - Failed Checkpoints: {len(failed)}
-        
-        Completed Checkpoints:
-        {[cp.name for cp in completed]}
-        
-        Failed Checkpoints:
-        {[cp.name for cp in failed]}
-        
-        Error Messages:
-        {self._get_error_messages(success, failed)}
-        
-        Generate the final results.
-        """
-        relevant_message_history: list[ModelMessage] = self.memory.get_context(
-                query="Generate the final results",
-            )
-        final_result: AgentRunResult[FinalResults] = await self._result_agent.run(user_prompt=query,
-                                                                            message_history=relevant_message_history)
-        
-        return final_result.output
-        
-    def _generate_basic_summary(
-        self, 
-        success: bool, 
-        completed: list[Checkpoint],
-        failed: list[Checkpoint]
-    ) -> tuple[str,str]:
-        """Fallback basic summary generator"""
-        
-        error_messages: list[str] = self._get_error_messages(success, failed)
-        if success:
-            return f"Workflow completed successfully. {len(completed)} checkpoints completed.", "No Recommendations"
-        else:
-            return f"Workflow incomplete. {len(completed)} completed, {len(failed)} failed.", "\n".join(error_messages)
-    
-    def _get_error_messages(
-        self, 
-        success: bool,
-        failed: list[Checkpoint]
-    ) -> list[str]:
-        """Generate recommendations"""
-        error_messages = []
-        
-        if not success and failed:
-            for cp in failed:
-                if cp.error_message:
-                    error_messages.append(
-                        f"Address failure in '{cp.name}': {cp.error_message}"
-                    )
-        
-        return error_messages
     
     #--------------------------
     # Incorporate with UI
@@ -749,7 +651,7 @@ class MessageFactory:
 #------------------------------------------
 class VerificationHandler(Generic[DepsType]):
     """Handles Checkpoint verification"""
-    def __init__(self,deps_type: type[DepsType] = NoDeps,) -> None:
+    def __init__(self, deps_type: type[DepsType] = NoDeps) -> None:
         self.llm_settings: LLMSettings = load_settings(key="llm")
         #-------------------------------------
         # Verification agent
@@ -771,7 +673,7 @@ class VerificationHandler(Generic[DepsType]):
             instructions="Based on the context and the rules mentioned verify the given Checkpoint."
         )
     
-    async def _verify_checkpoint_with_llm(self, 
+    async def verify_checkpoint_with_llm(self, 
                                     checkpoint: Checkpoint,
                                     memory: MemoryManager,
                                     deps: DepsType) -> Optional[str]:
@@ -810,7 +712,7 @@ class VerificationHandler(Generic[DepsType]):
         else:
             return "Verification failed but error messages were not obtained."
     
-    async def _verify_checkpoint_with_heuristics(self, 
+    async def verify_checkpoint_with_heuristics(self, 
                                                  checkpoint: Checkpoint, 
                                                  memory: MemoryManager,
                                                  deps: DepsType) -> Optional[str]:
@@ -874,3 +776,126 @@ class VerificationHandler(Generic[DepsType]):
         )
         
         return result.output.parameters
+
+class WorkflowResultBuilder:
+    def __init__(self, final_results_type: type[FinalResults]) -> None:
+        self.llm_settings: LLMSettings = load_settings(key="llm")
+        #-------------------------------------
+        # Result agent
+        #-------------------------------------
+        self._result_agent: Agent[None, FinalResults] = Agent(
+            model=llm_model.get_llm_model(self.llm_settings),
+            model_settings=ModelSettings(temperature=0.1),
+            output_type=final_results_type,
+            instructions="Based on the workflow execution, please generate the final results following the required structure."
+        )
+    
+    async def generate_workflow_result(
+        self, 
+        session_id: str,
+        execution_time: float,
+        success: bool,
+        memory: MemoryManager,
+        agent_type: str,
+        checkpoint_objects: dict[str,Checkpoint],
+        state: AgentState
+    ) -> WorkflowResult:
+        """Generate final workflow result"""
+        completed: list[Checkpoint] = [
+            cp for cp in checkpoint_objects.values() 
+            if cp.status == "completed"
+        ]
+        failed: list[Checkpoint] = [
+            cp for cp in checkpoint_objects.values() 
+            if cp.status == "failed"
+        ]
+        
+        final_result: FinalResults = await self._generate_llm_summary_and_results(success=success, 
+                                                                                  completed=completed, 
+                                                                                  failed=failed, 
+                                                                                  memory=memory,
+                                                                                  agent_type=agent_type,
+                                                                                  checkpoint_objects=checkpoint_objects)
+        
+        return WorkflowResult(
+            success=success,
+            session_id=session_id,
+            workflow_type=agent_type,
+            final_state=state.workflow_state,
+            completed_checkpoints=completed,
+            failed_checkpoints=failed,
+            results=final_result,
+            recommendations=final_result.recommendations,
+            summary=final_result.design_summary,
+            total_execution_time=execution_time,
+            errors=state.errors
+        )
+        
+    async def _generate_llm_summary_and_results(
+        self, 
+        success: bool, 
+        completed: list[Checkpoint],
+        failed: list[Checkpoint],
+        memory: MemoryManager,
+        agent_type: str,
+        checkpoint_objects: dict[str,Checkpoint]
+    ) -> FinalResults:
+        """LLM based executive summary and recommendations"""
+        query: str = f"""
+        Workflow Summary Context:
+        - Workflow Type: {agent_type}
+        - Success Status: {success}
+        - Total Checkpoints: {len(checkpoint_objects)}
+        - Completed Checkpoints: {len(completed)}
+        - Failed Checkpoints: {len(failed)}
+        
+        Completed Checkpoints:
+        {[cp.name for cp in completed]}
+        
+        Failed Checkpoints:
+        {[cp.name for cp in failed]}
+        
+        Error Messages:
+        {self._get_error_messages(success, failed)}
+        
+        Generate the final results.
+        """
+        relevant_message_history: list[ModelMessage] = memory.get_context(
+                query="Generate the final results",
+            )
+        
+        final_result: AgentRunResult[FinalResults] = await self._result_agent.run(user_prompt=query,
+                                                                            message_history=relevant_message_history)
+        
+        return final_result.output
+        
+    def _generate_basic_summary(
+        self, 
+        success: bool, 
+        completed: list[Checkpoint],
+        failed: list[Checkpoint]
+    ) -> tuple[str,str]:
+        """Fallback basic summary generator"""
+        
+        error_messages: list[str] = self._get_error_messages(success, failed)
+        if success:
+            return f"Workflow completed successfully. {len(completed)} checkpoints completed.", "No Recommendations"
+        else:
+            return f"Workflow incomplete. {len(completed)} completed, {len(failed)} failed.", "\n".join(error_messages)
+    
+    def _get_error_messages(
+        self, 
+        success: bool,
+        failed: list[Checkpoint]
+    ) -> list[str]:
+        """Generate recommendations"""
+        error_messages = []
+        
+        if not success and failed:
+            for cp in failed:
+                if cp.error_message:
+                    error_messages.append(
+                        f"Address failure in '{cp.name}': {cp.error_message}"
+                    )
+        
+        return error_messages
