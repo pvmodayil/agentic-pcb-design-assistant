@@ -295,18 +295,19 @@ class WorkflowResult(BaseModel):
     total_execution_time: float = Field(default=0.0)
     errors: list[str] = Field(default_factory=list)
 
+class ActionStatus(StrEnum):
+    ANALYZED = "analyzed"
+    CONTEXT_UPDATED = "context_updated"
+    TOOL_EXECUTED = "tool_executed"
+    CHECKPOINT_VERIFIED = "checkpoint_verified"
+    HUMAN_INPUT_RECEIVED = "human_input_received"
+    PROCEED_TO_NEXT = "proceed_to_next"
+    WORKFLOW_COMPLETED = "workflow_completed"
+    RETRY_REQUIRED = "retry_required"
+    VERIFICATION_FAILED = "verification_failed"
+    ERROR = "error"
 class ActionResult(BaseModel):
-    status: Literal[
-        "analyzed",
-        "context_updated",
-        "tool_executed",
-        "checkpoint_verified",
-        "human_input_received",
-        "proceed_to_next",
-        "workflow_completed",
-        "retry_required",
-        "verification_failed",
-        "error"] = Field(..., description="status")
+    status: ActionStatus = Field(..., description="status")
     tool_result: Optional[ToolResult] = Field(default=None, description="Results from tool executions")
     checkpoint: Optional[str] = Field(default=None, description="Name of the checkpoint, if verification")
     error_message: Optional[str] = Field(default=None, description="Error message")

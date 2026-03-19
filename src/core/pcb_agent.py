@@ -16,7 +16,7 @@ import llm_model
 from settings import load_settings, LLMSettings
 from memory_manager import MemoryManager
 from tool_registry import ToolRegistry, get_function_parameters
-from data_models import (ActionType, AgentState, 
+from data_models import (ActionStatus, ActionType, AgentState, 
                         Checkpoint, 
                         AgentAction, 
                         WorkflowResult, 
@@ -440,11 +440,11 @@ class PCBAgent(Generic[DepsType]):
                 return self._complete_workflow_action()
             
             else:  # ActionType.ANALYZE
-                return ActionResult(status="analyzed", message=action.reasoning)
+                return ActionResult(status=ActionStatus.ANALYZED, message=action.reasoning)
         
         except Exception as e:
             logger.error(f"Action execution error: {e}", exc_info=True)
-            return ActionResult(status="error", error_message=str(e))
+            return ActionResult(status=ActionStatus.ERROR, error_message=str(e))
     
     async def _execute_tool_action(
         self, 
@@ -455,20 +455,20 @@ class PCBAgent(Generic[DepsType]):
         if action.tool_name:
             tool_name: str = action.tool_name
         else:
-            return ActionResult(status="error", error_message="No tool name provided")
+            return ActionResult(status=ActionStatus.ERROR, error_message="No tool name provided")
         
         if not action.tool_parameters:
-            return ActionResult(status="error", error_message=f"Tool {tool_name} parameters not provided")
+            return ActionResult(status=ActionStatus.ERROR, error_message=f"Tool {tool_name} parameters not provided")
         
         tool_result: ToolResult = await self.tool_registry.handle_tool_call(tool_name=tool_name,
                                                                       tool_parameters=action.tool_parameters)
         self.state.tool_results = tool_result
         
         if tool_result.error_message:
-            return ActionResult(status="error", error_message=tool_result.error_message)
+            return ActionResult(status=ActionStatus.ERROR, error_message=tool_result.error_message)
         else:
             return ActionResult(
-                status="tool_executed",
+                status=ActionStatus.TOOL_EXECUTED,
                 tool_result=tool_result,
             )
     
@@ -481,29 +481,29 @@ class PCBAgent(Generic[DepsType]):
         question: str = action.question_for_human if action.question_for_human else "Failed to generate question. Prompt the agent for its query"
         human_response: str = self.provide_human_input(question=question)
         
-        return ActionResult(status="human_input_received", message=human_response)
+        return ActionResult(status=ActionStatus.HUMAN_INPUT_RECEIVED, message=human_response)
     
     def _update_context_action(self, action: AgentAction) -> ActionResult:
         """Update workflow context"""
         self.state.context_data.update(action.context_updates)
-        return ActionResult(status="context_updated", message=str(action.context_updates))
+        return ActionResult(status=ActionStatus.CONTEXT_UPDATED, message=str(action.context_updates))
     
     def _proceed_to_next_checkpoint_action(self,) -> ActionResult:
         """Move to next checkpoint"""
         if not self.state.pending_checkpoints:
             self.state.workflow_state = WorkflowState.COMPLETED
-            return ActionResult(status="workflow_completed", message="All checkpoints completed")
+            return ActionResult(status=ActionStatus.WORKFLOW_COMPLETED, message="All checkpoints completed")
         
         next_checkpoint = self.state.pending_checkpoints.pop(0) # Removes thge first element
         self.state.current_checkpoint = next_checkpoint
         self.checkpoint_objects[next_checkpoint].status = "in_progress"
         
-        return ActionResult(status="proceed_to_next", message=f"Next checkpoint {next_checkpoint}")
+        return ActionResult(status=ActionStatus.PROCEED_TO_NEXT, message=f"Next checkpoint {next_checkpoint}")
     
     def _retry_checkpoint_action(self, action: AgentAction) -> ActionResult:
         """Retry current checkpoint"""
         if not self.state.can_retry():
-            return ActionResult(status="error", error_message="Maximum retries exceeded")
+            return ActionResult(status=ActionStatus.ERROR, error_message="Maximum retries exceeded")
         
         self.state.increment_retry()
         
@@ -511,12 +511,12 @@ class PCBAgent(Generic[DepsType]):
         if checkpoint_name and checkpoint_name in self.checkpoint_objects.keys():
             self.checkpoint_objects[checkpoint_name].status = "in_progress"
         
-        return ActionResult(status="retry_required", checkpoint=checkpoint_name, message=f"retry number {self.state.retry_count}")
+        return ActionResult(status=ActionStatus.RETRY_REQUIRED, checkpoint=checkpoint_name, message=f"retry number {self.state.retry_count}")
     
     def _complete_workflow_action(self) -> ActionResult:
         """Mark workflow as complete"""
         self.state.workflow_state = WorkflowState.COMPLETED
-        return ActionResult(status="workflow_completed", message="Workflow completed")
+        return ActionResult(status=ActionStatus.WORKFLOW_COMPLETED, message="Workflow completed")
     
     def _should_terminate(self) -> bool:
         """Check if workflow should terminate"""
@@ -538,10 +538,10 @@ class PCBAgent(Generic[DepsType]):
         """Verify a checkpoint"""
         checkpoint_name: str | None = action.checkpoint_name
         if not checkpoint_name:
-            return ActionResult(status="error", error_message="No checkpoint specified")
+            return ActionResult(status=ActionStatus.ERROR, error_message="No checkpoint specified")
         
         if checkpoint_name not in self.checkpoint_objects.keys():
-            return ActionResult(status="error", error_message=f"Unknown checkpoint: {checkpoint_name}")
+            return ActionResult(status=ActionStatus.ERROR, error_message=f"Unknown checkpoint: {checkpoint_name}")
         
         checkpoint: Checkpoint = self.checkpoint_objects[checkpoint_name]
         
@@ -549,7 +549,7 @@ class PCBAgent(Generic[DepsType]):
         if checkpoint.verification_tool_name: # When tool is mentioned with the checkpoint
             if not (action.tool_name == checkpoint.verification_tool_name):
                 checkpoint.mark_failed("Verification failed")
-                return ActionResult(status="error", 
+                return ActionResult(status=ActionStatus.ERROR, 
                                     checkpoint=checkpoint_name, 
                                     error_message=f"""Given {action.tool_name} is not matching with 
                                     the checkpoint verification tool {checkpoint.verification_tool_name}""")
@@ -570,10 +570,10 @@ class PCBAgent(Generic[DepsType]):
         if not error_messages:
             checkpoint.mark_completed()
             self.state.completed_checkpoints.append(checkpoint_name)
-            return ActionResult(status="checkpoint_verified", checkpoint=checkpoint_name)
+            return ActionResult(status=ActionStatus.CHECKPOINT_VERIFIED, checkpoint=checkpoint_name)
         else:
             checkpoint.mark_failed("Verification failed")
-            return ActionResult(status="verification_failed", checkpoint=checkpoint_name, error_message=error_messages)
+            return ActionResult(status=ActionStatus.VERIFICATION_FAILED, checkpoint=checkpoint_name, error_message=error_messages)
     
     async def _verify_checkpoint_with_llm(self, 
                                     checkpoint: Checkpoint,
