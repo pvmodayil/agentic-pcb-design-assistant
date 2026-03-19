@@ -23,7 +23,8 @@ from data_models import (ActionStatus, ActionType, AgentState,
                         ActionResult, 
                         FinalResults,
                         ParameterGather,
-                        VerificationResult)
+                        VerificationResult,
+                        Summary)
 
 from message_builder import MessageFactory
 from input import HumanInputProvider, ConsoleInputProvider
@@ -86,7 +87,7 @@ class VerificationHandler(Generic[DepsType]):
         """
         verification_query: str = f"""
         You have reached the checkpoint: {checkpoint.name} in the workflow and need to verify that the results obtained so far are accurate.
-        You must be precise with your anlysis as accuracy is very important in this workflow.
+        You must be precise with your analysis as accuracy is very important in this workflow.
         
         **Verification Rule**: 
         {checkpoint.verification_rule}
@@ -126,7 +127,7 @@ class VerificationHandler(Generic[DepsType]):
         else: 
             parameters: dict[str,Any] = await self._gather_parameters(checkpoint, memory, deps)
             if not parameters:
-                return "Erro in gathering parameters for the verifier function notify human."
+                return "Error in gathering parameters for the verifier function notify human."
         
         result: VerificationResult = await checkpoint.verifier_function(**parameters)
         
@@ -211,12 +212,19 @@ class WorkflowResultBuilder:
             if cp.status == "failed"
         ]
         
-        final_result: FinalResults = await self._generate_llm_summary_and_results(success=success, 
-                                                                                  completed=completed, 
-                                                                                  failed=failed, 
-                                                                                  memory=context.memory,
-                                                                                  agent_type=agent_type,
-                                                                                  checkpoint_objects=context.checkpoint_objects)
+        try:
+            final_result: FinalResults = await self._generate_llm_summary_and_results(success=success, 
+                                                                                    completed=completed, 
+                                                                                    failed=failed, 
+                                                                                    memory=context.memory,
+                                                                                    agent_type=agent_type,
+                                                                                    checkpoint_objects=context.checkpoint_objects)
+        except Exception as e:
+            final_result = FinalResults() # With default None values
+            fallback_summary: Summary = self._generate_basic_summary(success=success,
+                                                            completed=completed,
+                                                            failed=failed,
+                                                            exception=e)
         
         return WorkflowResult(
             success=success,
@@ -226,8 +234,8 @@ class WorkflowResultBuilder:
             completed_checkpoints=completed,
             failed_checkpoints=failed,
             results=final_result,
-            recommendations=final_result.recommendations,
-            summary=final_result.design_summary,
+            recommendations=final_result.recommendations or fallback_summary.recommendation, #type:ignore
+            summary=final_result.design_summary or fallback_summary.summary, #type:ignore
             total_execution_time=execution_time,
             errors=context.state.errors
         )
@@ -274,15 +282,17 @@ class WorkflowResultBuilder:
         self, 
         success: bool, 
         completed: list[Checkpoint],
-        failed: list[Checkpoint]
-    ) -> tuple[str,str]:
+        failed: list[Checkpoint],
+        exception: Exception
+    ) -> Summary:
         """Fallback basic summary generator"""
-        
         error_messages: list[str] = self._get_error_messages(success, failed)
         if success:
-            return f"Workflow completed successfully. {len(completed)} checkpoints completed.", "No Recommendations"
+            return Summary(summary=f"Workflow completed successfully. {len(completed)} checkpoints completed. LLM result generation failed with {exception}", 
+                           recommendation="No Recommendations")
         else:
-            return f"Workflow incomplete. {len(completed)} completed, {len(failed)} failed.", "\n".join(error_messages)
+            return Summary(summary=f"Workflow incomplete. {len(completed)} completed, {len(failed)} failed. LLM result generation failed with {exception}", 
+                           recommendation="\n".join(error_messages))
     
     def _get_error_messages(
         self, 
