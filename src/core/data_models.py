@@ -4,7 +4,7 @@ from datetime import datetime
 
 from jsonschema import validate, ValidationError
 
-from enum import IntEnum
+from enum import IntEnum, StrEnum
 
 from abc import ABC, abstractmethod
 from pydantic import BaseModel, Field, ConfigDict
@@ -46,18 +46,18 @@ class Checkpoint(BaseModel):
                 self.metadata = {}
             self.metadata.update(metadata)
 
+class ActionType(StrEnum):
+    EXECUTE_TOOL = "execute_tool"
+    VERIFY_CHECKPOINT = "verify_checkpoint"
+    REQUEST_HUMAN_INPUT = "request_human_input"
+    UPDATE_CONTEXT = "update_context"
+    PROCEED_TO_NEXT = "proceed_to_next"
+    RETRY_CHECKPOINT = "retry_checkpoint"
+    COMPLETE_WORKFLOW = "complete_workflow"
+    ANALYZE = "analyze"
 class AgentAction(BaseModel):
     """Structured action that the agent can take"""
-    action_type: Literal[
-        "analyze", 
-        "execute_tool", 
-        "verify_checkpoint", 
-        "request_human_input",
-        "update_context",
-        "proceed_to_next",
-        "retry_checkpoint",
-        "complete_workflow"
-    ] = Field(..., description="Type of action to perform")
+    action_type: ActionType = Field(..., description="Type of action to perform")
     
     # Action-specific data
     checkpoint_name: Optional[str] = Field(default=None)
@@ -295,23 +295,24 @@ class WorkflowResult(BaseModel):
     total_execution_time: float = Field(default=0.0)
     errors: list[str] = Field(default_factory=list)
 
+class ActionStatus(StrEnum):
+    ANALYZED = "analyzed"
+    CONTEXT_UPDATED = "context_updated"
+    TOOL_EXECUTED = "tool_executed"
+    CHECKPOINT_VERIFIED = "checkpoint_verified"
+    HUMAN_INPUT_RECEIVED = "human_input_received"
+    PROCEED_TO_NEXT = "proceed_to_next"
+    WORKFLOW_COMPLETED = "workflow_completed"
+    RETRY_REQUIRED = "retry_required"
+    VERIFICATION_FAILED = "verification_failed"
+    ERROR = "error"
 class ActionResult(BaseModel):
-    status: Literal[
-        "analyzed",
-        "context_updated",
-        "tool_executed",
-        "checkpoint_verified",
-        "human_input_received",
-        "proceed_to_next",
-        "workflow_completed",
-        "retry_required",
-        "verification_failed",
-        "error"] = Field(..., description="status")
+    status: ActionStatus = Field(..., description="status")
     tool_result: Optional[ToolResult] = Field(default=None, description="Results from tool executions")
     checkpoint: Optional[str] = Field(default=None, description="Name of the checkpoint, if verification")
     error_message: Optional[str] = Field(default=None, description="Error message")
     message: Optional[str] = Field(default=None, description="Message")
-
+        
 #---------------------------------------------------------
 #                       Summary
 #---------------------------------------------------------
