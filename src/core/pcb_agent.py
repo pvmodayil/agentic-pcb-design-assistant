@@ -1,4 +1,4 @@
-from typing import TypeVar, Generic, Any, Optional
+from typing import Protocol, TypeVar, Generic, Any, Optional, runtime_checkable
 from dataclasses import dataclass
 
 import uuid
@@ -14,7 +14,7 @@ from loguru import logger
 
 import llm_model
 from settings import load_settings, LLMSettings
-import memory_manager
+from memory_manager import MemoryManager
 from tool_registry import ToolRegistry, get_function_parameters
 from data_models import (AgentState, 
                         Checkpoint, 
@@ -26,7 +26,33 @@ from data_models import (AgentState,
                         FinalResults,
                         ParameterGather,
                         VerificationResult)
-            
+
+#---------------------------------------------------------
+#                     Human Input
+#---------------------------------------------------------
+@runtime_checkable
+class HumanInputProvider(Protocol):
+    def get_input(self, question: str) -> str: ...
+
+class ConsoleInputProvider:
+    def get_input(self, question: str) -> str:
+        try:
+            return input(f"\n{question}\n> ")
+        except Exception:
+            return ""
+        
+#---------------------------------------------------------
+#                    Agent Context
+#---------------------------------------------------------
+@dataclass
+class AgentContext:
+    """Contains the main context elements"""
+    state: AgentState
+    memory: MemoryManager
+    tool_registry: ToolRegistry
+    checkpoint_objects: dict[str, Checkpoint]
+    human_input_provider: HumanInputProvider  
+         
 #------------------------------------------
 # PCB Agent (Abstract agent class)
 #------------------------------------------
@@ -96,7 +122,7 @@ class PCBAgent(Generic[DepsType]):
         #-------------------------------------
         # Memory manager
         #-------------------------------------
-        self.memory = memory_manager.MemoryManager(agent_type=agent_type)
+        self.memory = MemoryManager(agent_type=agent_type)
         
         #-------------------------------------
         # Verification agent
@@ -825,6 +851,5 @@ class MessageFactory:
 #------------------------------------------
 # Action Handler
 #------------------------------------------
-class ActionHandler:
-    """Handles the different action types"""
+    
     

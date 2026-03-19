@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Optional, Literal, Any, Callable, Awaitable
+from typing import Optional, Literal, Any, Callable, Awaitable, Protocol, runtime_checkable
 from datetime import datetime
 
 from jsonschema import validate, ValidationError
@@ -9,6 +9,9 @@ from enum import IntEnum
 from abc import ABC, abstractmethod
 from pydantic import BaseModel, Field, ConfigDict
 from loguru import logger
+
+from src.core.memory_manager import MemoryManager
+from src.core.tool_registry import ToolRegistry
 
 #---------------------------------------------------------
 #                     Agent & Workflow
@@ -311,7 +314,7 @@ class ActionResult(BaseModel):
     checkpoint: Optional[str] = Field(default=None, description="Name of the checkpoint, if verification")
     error_message: Optional[str] = Field(default=None, description="Error message")
     message: Optional[str] = Field(default=None, description="Message")
-
+        
 #---------------------------------------------------------
 #                       Summary
 #---------------------------------------------------------
