@@ -17,7 +17,7 @@ class MessageFactory:
 
         # The result returned to the LLM
         result_payload: str = json.dumps(
-            tool_result.result_data if tool_result.success else {"error": tool_result.error_message},
+            tool_result.result_data if tool_result.success else {}, # Error message will be added later
             default=str,            # handles datetime, Decimal, etc.
         )
         tool_return_msg = ModelRequest(
@@ -40,8 +40,7 @@ class MessageFactory:
         """
         action_error_message = ModelRequest(
                 parts=[UserPromptPart(
-                    content=f"[ACTION ERROR] {action_result.error_message or 'Unknown error'}. "
-                            f"Please adjust your approach and retry."
+                    content=f"**[ACTION ERROR]** {action_result.error_message or 'Unknown error'}."
                 )]
             )
         
@@ -52,7 +51,7 @@ class MessageFactory:
         """Injects human input so the agent knows what the human said"""
         human_input_message = ModelRequest(
                 parts=[UserPromptPart(
-                    content=f"[HUMAN INPUT] {action_result.message or 'Did not receive input'}. "
+                    content=f"**[HUMAN INPUT]** {action_result.message or 'Did not receive input'}. "
                             f"Please retry."
                 )]
             )
@@ -62,7 +61,7 @@ class MessageFactory:
     def build_notes_message(verification_result: VerificationResult) -> list[ModelMessage]:
         message: list[ModelMessage] = [ModelRequest(
                 parts=[UserPromptPart(
-                    content=f"[VERIFICATION NOTES] {verification_result.notes}."
+                    content=f"**[VERIFICATION NOTES]** {verification_result.notes}."
                 )]
             )]
         return message
