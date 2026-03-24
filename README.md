@@ -82,7 +82,11 @@ Run the main application:
 ```bash
 uv run src/main.py
 ```
+### Docs
 
+```bash
+uv run zensical serve
+```
 ## Contributing
 
 This project is part of the [Information Processing Lab's](https://dt.etit.tu-dortmund.de/en/) agentic AI research initiative.
