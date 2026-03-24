@@ -1,0 +1,8 @@
+# Ignore the Built site
+site/*
+
+# Ignore env
+.env
+
+# Ignore outputs
+outputs/*
