@@ -14,8 +14,8 @@ A composable framework for PCB designers to build, configure, and run
 LLM-powered agents — from single-step validators to full multi-agent pipelines.
 </p>
 
-[Get started](getting-started/index.md){ .md-button .md-button--primary }
-[Core concepts](concepts/index.md){ .md-button }
+[Getting Started](getting-started/index.md){ .md-button .md-button--primary }
+[Core Concepts](core-concepts/index.md){ .md-button }
 </div>
 
 ---
