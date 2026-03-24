@@ -1,28 +1,25 @@
 [project]
+site_name        = "Agentic PCB Design Assistant"
+site_description = "An intelligent, agent-based PCB design automation assistant powered by AI."
+site_author      = "Philip Varghese Modayil"
+copyright        = "Copyright &copy; 2026 Philip Varghese Modayil"
+docs_dir         = "docs"
+site_dir         = "site"
+extra_css        = ["stylesheets/extra.css"]
+#site_url        = "https://www.example.com/"
 
-site_name = "Agentic PCB Design Assistant"
-site_description = "An intelligent, agent-based PCB (Printed Circuit Board) design automation assistant powered."
-site_dir = "site"
-site_author = "Philip Varghese Modayil"
-#site_url = "https://www.example.com/"
-copyright = """
-Copyright &copy; 2026 Philip Varghese Modayil
-"""
-
-docs_dir = "docs"
 nav = [
-  { "Get started" = "index.md" },
-  { "Markdown in 5min" = "markdown.md" },
+  { "Home"            = "index.md" },
+  { "About"            = "about.md"},
+  { "Get started"     = "getting-started/index.md"},
+  { "Core Concepts"   = "core-concepts/index.md"},
 ]
 
+[project.markdown_extensions.attr_list]
+[project.markdown_extensions.md_in_html]
+
 [project.theme]
-# change this to "classic" to use the traditional Material for MkDocs look.
-#variant = "classic"
-
 language = "en"
-
-# Zensical provides a number of feature toggles that change the behavior
-# of the documentation site.
 features = [
     "announce.dismiss",
     "content.code.annotate",
@@ -50,48 +47,16 @@ features = [
     "toc.integrate",
 ]
 
-# ----------------------------------------------------------------------------
-# You can configure your own logo to be shown in the header using the "logo"
-# option in the "theme" subsection. The logo must be a relative path to a file
-# in your "docs_dir", e.g., to use `docs/assets/logo.png` you would set:
-# ----------------------------------------------------------------------------
-#logo = "assets/logo.png"
-
-# ----------------------------------------------------------------------------
-# If you don't have a dedicated project logo, you can use a built-in icon from
-# the icon sets shipped in Zensical. Please note that the setting lives in a
-# different subsection, and that the above take precedence over the icon.
-#
-# Read more:
-# - https://zensical.org/docs/setup/logo-and-icons
-# - https://github.com/zensical/ui/tree/master/dist/.icons
-# ----------------------------------------------------------------------------
-#[project.theme.icon]
-#logo = "lucide/smile"
-
-# ----------------------------------------------------------------------------
-# In the "font" subsection you can configure the fonts used. By default, fonts
-# are loaded from Google Fonts, giving you a wide range of choices from a set
-# of suitably licensed fonts. There are options for a normal text font and for
-# a monospaced font used in code blocks.
-# ----------------------------------------------------------------------------
-#[project.theme.font]
-#text = "Inter"
-#code = "Jetbrains Mono"
-
 [[project.theme.palette]]
-scheme = "default"
+scheme      = "default"
 toggle.icon = "lucide/sun"
 toggle.name = "Switch to dark mode"
 
 [[project.theme.palette]]
-scheme = "slate"
+scheme      = "slate"
 toggle.icon = "lucide/moon"
 toggle.name = "Switch to light mode"
 
-# ----------------------------------------------------------------------------
-# The "extra" section contains miscellaneous settings.
-# ----------------------------------------------------------------------------
-#[[project.extra.social]]
-#icon = "fontawesome/brands/github"
-#link = "https://github.com/user/repo"
+[project.theme.font]
+text = "IBM Plex Sans"
+code = "IBM Plex Mono"
