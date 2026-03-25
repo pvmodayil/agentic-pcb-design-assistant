@@ -3,8 +3,9 @@ from pydantic import Field
 import yaml
 from pathlib import Path
 from typing import TypedDict
+from loguru import logger
 
-PROJECT_ROOT: Path = Path(__file__).resolve().parents[3]  # Up 3 levels: core -> src -> root
+PROJECT_ROOT: Path = Path(__file__).resolve().parents[2]  # Up 2 levels: core -> src -> root
 
 class LLMConfigDict(TypedDict):
     model_name: str
@@ -24,6 +25,7 @@ def load_settings(key: str) -> LLMSettings:
     config_path: Path = PROJECT_ROOT / "config" / "llm_config.yaml"
     
     if not config_path.exists():
+        logger.critical("LLM config file missing moving froward with default model = gemma3.")
         return LLMSettings() #type:ignore
     
     with config_path.open("r", encoding="utf-8") as f:

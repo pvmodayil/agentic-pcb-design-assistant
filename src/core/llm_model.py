@@ -4,6 +4,7 @@ from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.providers.ollama import OllamaProvider
 import subprocess
 from src.core.settings import LLMSettings
+from loguru import logger
 
 def is_ollama_running() -> bool:
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -29,6 +30,8 @@ def get_llm_model(llm_settings: LLMSettings) -> OpenAIChatModel:
     if not is_ollama_running():
         print("Starting ollama")
         subprocess.Popen(["ollama", "serve"])
+        logger.info("Ollama server started")
+    logger.info("Ollama server running")
     ollama_model = OpenAIChatModel(
     model_name=llm_settings.model_name,
     provider=OllamaProvider(base_url=llm_settings.base_url)
