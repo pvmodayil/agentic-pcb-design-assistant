@@ -707,6 +707,7 @@ class PCBAgent(Generic[DepsType]):
                 self.context.state.workflow_state = WorkflowState.ANALYZING
                 step_count += 1
                 logger.info(f"Step {step_count}: State={self.context.state.workflow_state.name}")
+                logger.info(f"Current Checkpoint: {self.context.state.current_checkpoint}")
                 
                 # Check termination conditions
                 if self._should_terminate():

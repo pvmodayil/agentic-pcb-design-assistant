@@ -102,8 +102,8 @@ async def verify_optimization(target_zdiff: float, optimized_zdiff: float, simul
 #--------------------------------------------
 checkpoints: list[Checkpoint] = [
     Checkpoint(
-        name="optimize_coupled_microstrip_geometry_parameters",
-        description="Optimize geometric parameters using coupled microstrip optimizer",
+        name="Optimized Geometric Design",
+        description="Optimize geometric parameters for the coupled microstrip arrangement using relevant tools",
         verification_strategy="heuristics",
         verification_tool_name="simulate_bem", # Match with the name in the ToolDefinition
         verifier_function=verify_optimization

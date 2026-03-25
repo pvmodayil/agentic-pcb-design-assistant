@@ -11,9 +11,6 @@ async def main() -> None:
     **height of the arrangement: 250 micro meters**,
     **thickness of the strip: 35 micro meters**,
     and **spacing range in micro meters: (150, 300)**
-    
-    Use the provided optimisation tools to optimise the geometric parameters for the coupled microstrip arrangement.
-    Return the final design after optimisation.
     """
     
     workflow_result: WorkflowResult = await cmsAgent.run_coupled_microstrip_agent(query=query)
