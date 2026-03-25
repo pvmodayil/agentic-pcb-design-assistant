@@ -3,7 +3,7 @@ import http.client
 from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.providers.ollama import OllamaProvider
 import subprocess
-from config.settings import LLMSettings
+from src.core.settings import LLMSettings
 
 def is_ollama_running() -> bool:
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)

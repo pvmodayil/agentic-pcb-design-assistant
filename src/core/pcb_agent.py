@@ -10,11 +10,11 @@ from pydantic_ai.messages import ModelMessage
 
 from loguru import logger
 
-import llm_model
-from settings import load_settings, LLMSettings
-from memory_manager import MemoryManager
-from tool_registry import ToolRegistry, get_function_parameters
-from data_models import (ActionStatus, ActionType, AgentState, 
+from src.core import llm_model
+from src.core.settings import load_settings, LLMSettings
+from src.core.memory_manager import MemoryManager
+from src.core.tool_registry import ToolRegistry, get_function_parameters
+from src.core.data_models import (ActionStatus, ActionType, AgentState, 
                         Checkpoint, 
                         AgentAction, 
                         WorkflowResult, 
@@ -26,7 +26,7 @@ from data_models import (ActionStatus, ActionType, AgentState,
                         VerificationResult,
                         Summary)
 
-from message_builder import MessageFactory
+from src.core.message_builder import MessageFactory
 from src.protocols.input_protocol import HumanInputProvider, ConsoleInputProvider
         
 #---------------------------------------------------------

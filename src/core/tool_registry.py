@@ -3,8 +3,7 @@ import inspect
 from typing import get_type_hints
 from loguru import logger
 
-from .data_models import ToolDefinition
-from .data_models import ToolResult
+from src.core.data_models import ToolDefinition, ToolResult
 #--------------------------------------------
 # Tool Registry (To Register Tools for Agent)
 #--------------------------------------------

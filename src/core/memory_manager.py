@@ -8,11 +8,11 @@ from dataclasses import dataclass, field
 from loguru import logger
 import asyncio
 
-from llm_model import get_llm_model
-from settings import load_settings
+from src.core.llm_model import get_llm_model
+from src.core.settings import load_settings
 
 from pydantic_ai import Agent, ModelSettings, AgentRunResult
-from data_models import Summary
+from src.core.data_models import Summary
 
 #------------------------------------------
 # Memory State

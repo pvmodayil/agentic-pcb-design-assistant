@@ -1,9 +1,9 @@
 llm:
-  model_name: gemma3
+  model_name: nemotron-3-super:120b
   base_url: http://localhost:11434/v1
   temperature: 0.4
 
 mem_llm:
-  model_name: gemma3n
+  model_name: nemotron-3-nano:4b
   base_url: http://localhost:11434/v1
   temperature: 0.4
