@@ -185,23 +185,25 @@ class ToolResult(BaseModel):
 #---------------------------------------------------------
 class WorkflowState(IntEnum):
     """Workflow execution states"""
+    # Informations
+    AWAITING_TOOL_RESULT = 100
+    AWAITING_HUMAN = 101
+    
     # Success states
     COMPLETED = 200
     PARTIAL_SUCCESS = 201
+    TEST_PASSED = 202
+    TEST_FAILED = 203
     
-    # Progression states
+    # State Transitions
     INITIAL = 300
     ANALYZING = 301
     EXECUTING_TOOL = 302
-    AWAITING_TOOL_RESULT = 303
     TOOL_COMPLETED = 304
-    AWAITING_HUMAN = 305
     HUMAN_RESPONDED = 306
-    
-    # Testing states
-    TESTING = 400
-    TEST_PASSED = 401
-    TEST_FAILED = 402
+    TESTING = 307
+
+    # Client error 4xx (Input validations)
     
     # Error states
     ERROR = 500
