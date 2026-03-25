@@ -15,7 +15,7 @@ from typing import Any, Optional, Callable
 import yaml
 
 from src.core.data_models import ToolParameter, ToolDefinition
-PROJECT_ROOT: Path = Path(__file__).resolve().parents[3]  # Up 3 levels: tools -> src -> root
+PROJECT_ROOT: Path = Path(__file__).resolve().parents[2]  # Up 2 levels: tools -> src -> root
 
 #------------------------------------------
 # Internal
