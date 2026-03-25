@@ -699,7 +699,10 @@ class PCBAgent(Generic[DepsType]):
         
         logger.info(f"Starting workflow session {session_id} \n Initial query: {initial_query}")
         
-        current_query = self._get_workflow_state_info() + initial_query 
+        start_instruction: str = """
+        Begin by opting to go to the next checkpoint as your current checkpoint is empty.
+        """
+        current_query = self._get_workflow_state_info() + initial_query + start_instruction
         step_count = 0   
         
         try:
@@ -708,7 +711,7 @@ class PCBAgent(Generic[DepsType]):
                 step_count += 1
                 logger.info(f"Step {step_count}: State={self.context.state.workflow_state.name}")
                 logger.info(f"Current Checkpoint: {self.context.state.current_checkpoint}")
-                
+
                 # Check termination conditions
                 if self._should_terminate():
                     break
