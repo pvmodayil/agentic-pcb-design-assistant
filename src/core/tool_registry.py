@@ -61,14 +61,14 @@ class ToolRegistry:
         if tool_def and not error_message:
             schema_errors: list|None = tool_def.validate_parameter_schema(tool_parameters)
             if schema_errors:
-                error_message = f"Tool '{tool_name}' parameters failed schema validation with errors: {schema_errors}"
+                schema = tool_def.parameters_schema["parameters"]
+                error_message = f"""Tool '{tool_name}' parameters failed schema validation with errors: {schema_errors}
+                The correct parameter schema for this tool: {schema}"""
         
         if tool_def and not error_message:
             parameter_errors: list|None = tool_def.validate_parameters(tool_parameters)
             if parameter_errors:
-                schema = tool_def.parameters_schema["parameters"]
-                error_message = f"""Tool '{tool_name}' parameters failed validation with errors: {parameter_errors}. 
-                The correct parameter schema for this tool: {schema}"""
+                error_message = f"Tool '{tool_name}' parameters failed validation with errors: {parameter_errors}"
         
         if not error_message:
             try:
@@ -88,7 +88,7 @@ class ToolRegistry:
                 logger.success(f"Executed tool: {tool_name}")
                 return tool_result
             except Exception as e:
-                logger.error(f"Tool execution failed: {e}", exc_info=True)
+                logger.exception(f"Tool execution failed: {e}", exc_info=True)
                 error_message=f"Tool {tool_name} execution failed: {e}"
         
         # Return error result
