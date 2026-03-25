@@ -55,7 +55,7 @@ class ToolRegistry:
         
         tool_def: ToolDefinition = self.get_tool_definition(tool_name)
         if not tool_def:
-            error_message = f"Tool definition missing: {tool_name}"
+            error_message = f"Tool definition missing: {tool_name}. Available tools in the tool registry: {self._tools.keys()}"
         
         # Validate parameters (custom validation logic for every tool)
         if tool_def and not error_message:
@@ -66,7 +66,9 @@ class ToolRegistry:
         if tool_def and not error_message:
             parameter_errors: list|None = tool_def.validate_parameters(tool_parameters)
             if parameter_errors:
-                error_message = f"Tool '{tool_name}' parameters failed validation with errors: {parameter_errors}"
+                schema = tool_def.parameters_schema["parameters"]
+                error_message = f"""Tool '{tool_name}' parameters failed validation with errors: {parameter_errors}. 
+                The correct parameter schema for this tool: {schema}"""
         
         if not error_message:
             try:
