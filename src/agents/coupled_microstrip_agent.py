@@ -130,7 +130,7 @@ coupled_strip_agent: PCBAgent = PCBAgent(agent_type="Coupled Microstrip Agent",
 #------------------------------------------
 async def run_coupled_microstrip_agent(query: str) -> WorkflowResult:
     """Public API to invoke the agent"""
-    logger.start("Starting Coupled Microstrip Agent")
+    logger.info("Starting Coupled Microstrip Agent")
     workflow_result: WorkflowResult = await coupled_strip_agent.run(initial_query=query,)
     logger.info("Coupled Microstrip Agent Workflow Ended")
     return workflow_result

@@ -1,5 +1,5 @@
 llm:
-  model_name: nemotron-3-super:120b
+  model_name: nemotron-3-nano:4b #nemotron-3-super:120b
   base_url: http://localhost:11434/v1
   temperature: 0.4
 

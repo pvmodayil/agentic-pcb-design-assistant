@@ -210,18 +210,18 @@ def optimize_coupled_strip_parameters(
     for name, fixed_val, custom_range, default_min, default_max in param_configs:
         if fixed_val is not None:
             # FIXED to specific value
-            np.append(ga_l,float(fixed_val))
-            np.append(ga_u,float(fixed_val))
+            ga_l = np.append(ga_l,float(fixed_val))
+            ga_u = np.append(ga_u,float(fixed_val))
             param_status[name] = f"fixed at {fixed_val}"
         elif custom_range is not None:
             # OPTIMIZE in custom range
-            np.append(ga_l,float(custom_range[0]))
-            np.append(ga_u,float(custom_range[1]))
+            ga_l = np.append(ga_l,float(custom_range[0]))
+            ga_u = np.append(ga_u,float(custom_range[1]))
             param_status[name] = f"optimize in [{custom_range[0]}, {custom_range[1]}]"
         else:
             # OPTIMIZE in default range
-            np.append(ga_l,float(default_min))
-            np.append(ga_u,float(default_max))
+            ga_l = np.append(ga_l,float(default_min))
+            ga_u = np.append(ga_u,float(default_max))
             param_status[name] = f"optimize in [{default_min}, {default_max}]"
     
     # Run optimization

@@ -24,7 +24,7 @@ input_parameters:
   trace_spacing_um:
     type: "number"
     description: "Edge-to-edge spacing in micrometers. Leave null to optimize"
-    required: False
+    required: True
     min: 50.0
     max: 3000.0
   
