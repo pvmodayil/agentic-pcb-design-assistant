@@ -14,6 +14,8 @@ from src.core.data_models import  Checkpoint, WorkflowResult, VerificationResult
 from src.tools import coupled_microstrip_parameter_optimizer_tool as cmpo_tool
 from src.tools import bem_field_solver_simulator as bfs_tool
 
+from loguru import logger
+
 PROJECT_ROOT: Path = Path(__file__).resolve().parents[3]  # Up 3 levels: agents -> src -> root
 
 #------------------------------------------
@@ -128,6 +130,7 @@ coupled_strip_agent: PCBAgent = PCBAgent(agent_type="Coupled Microstrip Agent",
 #------------------------------------------
 async def run_coupled_microstrip_agent(query: str) -> WorkflowResult:
     """Public API to invoke the agent"""
+    logger.start("Starting Coupled Microstrip Agent \n" + "="*80)
     workflow_result: WorkflowResult = await coupled_strip_agent.run(initial_query=query,)
-    
+    logger.info("Coupled Microstrip Agent Workflow Ended")
     return workflow_result

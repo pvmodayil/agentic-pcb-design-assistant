@@ -366,22 +366,27 @@ class ActionHandler(Generic[DepsType]):
             tool_name: str = action.tool_name
         else:
             context.state.workflow_state = WorkflowState.AGENT_ERROR
+            logger.error(f"{context.state.workflow_state}: Tool name not mentioned")
             return ActionResult(status=ActionStatus.ERROR, error_message="No tool name provided")
         
         if not action.tool_parameters:
             context.state.workflow_state = WorkflowState.AGENT_ERROR
+            logger.error(f"{context.state.workflow_state}: Tool parameters not provided")
             return ActionResult(status=ActionStatus.ERROR, error_message=f"Tool {tool_name} parameters not provided")
         
         context.state.workflow_state = WorkflowState.EXECUTING_TOOL
+        logger.info(f"{context.state.workflow_state}: Tool Parameters {action.tool_parameters}")
         tool_result: ToolResult = await context.tool_registry.handle_tool_call(tool_name=tool_name,
                                                                       tool_parameters=action.tool_parameters)
         context.state.tool_results = tool_result
         
         if tool_result.error_message:
             context.state.workflow_state = WorkflowState.TOOL_ERROR
+            logger.error(f"{context.state.workflow_state}: {tool_result.error_message}")
             return ActionResult(status=ActionStatus.ERROR, error_message=tool_result.error_message)
         else:
             context.state.workflow_state = WorkflowState.TOOL_COMPLETED
+            logger.success(f"{context.state.workflow_state}: Tool Results {tool_result}")
             return ActionResult(
                 status=ActionStatus.TOOL_EXECUTED,
                 tool_result=tool_result,
@@ -397,10 +402,12 @@ class ActionHandler(Generic[DepsType]):
         checkpoint_name: str | None = action.checkpoint_name
         if not checkpoint_name:
             context.state.workflow_state = WorkflowState.AGENT_ERROR
+            logger.error(f"{context.state.workflow_state}: Checkpoint not specified")
             return ActionResult(status=ActionStatus.ERROR, error_message="No checkpoint specified")
         
         if checkpoint_name not in context.checkpoint_objects.keys():
             context.state.workflow_state = WorkflowState.AGENT_ERROR
+            logger.error(f"{context.state.workflow_state}: Unknown checkpoint: {checkpoint_name}")
             return ActionResult(status=ActionStatus.ERROR, error_message=f"Unknown checkpoint: {checkpoint_name}")
         
         checkpoint: Checkpoint = context.checkpoint_objects[checkpoint_name]
@@ -410,6 +417,8 @@ class ActionHandler(Generic[DepsType]):
             if not (action.tool_name == checkpoint.verification_tool_name):
                 checkpoint.mark_failed("Verification failed")
                 context.state.workflow_state = WorkflowState.AGENT_ERROR
+                logger.error(f"{context.state.workflow_state}: Given {action.tool_name} is not matching with " 
+                                    + f"the checkpoint verification tool {checkpoint.verification_tool_name}")
                 return ActionResult(status=ActionStatus.ERROR, 
                                     checkpoint=checkpoint_name, 
                                     error_message=f"""Given {action.tool_name} is not matching with 
@@ -423,6 +432,7 @@ class ActionHandler(Generic[DepsType]):
                         ) 
         try:
             context.state.workflow_state = WorkflowState.TESTING
+            logger.info(f"{context.state.workflow_state}")
             if checkpoint.verification_strategy == "analytical":    
                 error_messages: Optional[str] = await self._verification_handler.verify_checkpoint_with_llm(checkpoint=checkpoint, 
                                                                                                              memory=context.memory,
@@ -438,10 +448,12 @@ class ActionHandler(Generic[DepsType]):
         
         if not error_messages:
             context.state.workflow_state = WorkflowState.TEST_PASSED
+            logger.success(f"{context.state.workflow_state}")
             checkpoint.mark_completed()
             context.state.completed_checkpoints.append(checkpoint_name)
             return ActionResult(status=ActionStatus.CHECKPOINT_VERIFIED, checkpoint=checkpoint_name)
         else:
+            logger.info(f"{context.state.workflow_state}")
             context.state.workflow_state = WorkflowState.TEST_FAILED
             checkpoint.mark_failed("Verification failed")
             return ActionResult(status=ActionStatus.VERIFICATION_FAILED, checkpoint=checkpoint_name, error_message=error_messages)
@@ -454,7 +466,8 @@ class ActionHandler(Generic[DepsType]):
         context.state.needs_human_input = True
         context.state.human_question = action.question_for_human
         context.state.workflow_state = WorkflowState.AWAITING_HUMAN
-        
+        logger.info(f"{context.state.workflow_state}")
+
         question: str = action.question_for_human if action.question_for_human else "Failed to generate question. Prompt the agent for its query"
         human_response: str = await context.human_input_provider.get_input(question=question)
         context.state.workflow_state = WorkflowState.HUMAN_RESPONDED
@@ -476,12 +489,13 @@ class ActionHandler(Generic[DepsType]):
         """Move to next checkpoint"""
         if not context.state.pending_checkpoints:
             context.state.workflow_state = WorkflowState.COMPLETED
+            logger.info(f"{context.state.workflow_state}")
             return ActionResult(status=ActionStatus.WORKFLOW_COMPLETED, message="All checkpoints completed")
         
         next_checkpoint = context.state.pending_checkpoints.pop(0) # Removes thge first element
         context.state.current_checkpoint = next_checkpoint
         context.checkpoint_objects[next_checkpoint].status = "in_progress"
-        
+        logger.info(f"Next Checkpoint: {next_checkpoint}")
         return ActionResult(status=ActionStatus.PROCEED_TO_NEXT, message=f"Next checkpoint {next_checkpoint}")
     
     async def _retry_checkpoint_action(self, 
@@ -598,11 +612,13 @@ class PCBAgent(Generic[DepsType]):
         **Available Tools**: {tool_descriptions}
         
         **Your Responsibilities**:
-        1. Work through checkpoints systematically
+        1. Work through checkpoints systematically. 
+            - Get the next checkpoint from the list of pending checkpoints.
+            - Verify every checkpoint before moving on to the next.
+            - Complete the workflow and gather the final results when pending checkpoints are empty.
         2. Use tools when needed to gather information or perform calculations
         3. Request human input when facing ambiguity or critical decisions
-        4. Verify each checkpoint before proceeding
-        5. Provide clear reasoning for all actions
+        4. Provide clear reasoning for all actions
 
         **Action Types**:
         - analyze: Analyze current situation and plan next steps
@@ -681,8 +697,7 @@ class PCBAgent(Generic[DepsType]):
         session_id = str(uuid.uuid4())
         start_time: datetime = datetime.now()
         
-        logger.info(f"Starting workflow session {session_id}")
-        logger.info(f"Initial query: {initial_query}")
+        logger.info(f"Starting workflow session {session_id} \n Initial query: {initial_query}")
         
         current_query = self._get_workflow_state_info() + initial_query 
         step_count = 0   
