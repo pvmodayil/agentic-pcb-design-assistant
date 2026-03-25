@@ -16,7 +16,7 @@ from src.tools import bem_field_solver_simulator as bfs_tool
 
 from loguru import logger
 
-PROJECT_ROOT: Path = Path(__file__).resolve().parents[3]  # Up 3 levels: agents -> src -> root
+PROJECT_ROOT: Path = Path(__file__).resolve().parents[2]  # Up 2 levels: agents -> src -> root
 
 #------------------------------------------
 # Internal
