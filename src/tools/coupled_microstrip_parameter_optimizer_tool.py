@@ -88,8 +88,8 @@ class ZdiffProblem(Problem):
                                 norm_min=self.norm_min,
                                 norm_max=self.norm_max, 
                                 model_session=self.model_session)
-        z_odd: float = Y[:, 1].item()
-        z_diff: float = 2.0 * z_odd
+        z_odd: np.ndarray = Y[:, 1]
+        z_diff: np.ndarray = 2.0 * z_odd
         out["F"] = (z_diff - self.target) ** 2
 
 class CoupledStripOptimizerToolDefinition(ToolDefinition):
@@ -203,8 +203,8 @@ def optimize_coupled_strip_parameters(
             ("dielectric", dielectric_constant, er_range, min_er, max_er)
         ]
     
-    ga_l = np.array([])
-    ga_u = np.array([])
+    ga_l: np.ndarray = np.array([], dtype=np.float64)
+    ga_u: np.ndarray = np.array([], dtype=np.float64)
     param_status: dict[str, Any] = {}
     
     for name, fixed_val, custom_range, default_min, default_max in param_configs:
@@ -223,9 +223,6 @@ def optimize_coupled_strip_parameters(
             np.append(ga_l,float(default_min))
             np.append(ga_u,float(default_max))
             param_status[name] = f"optimize in [{default_min}, {default_max}]"
-    
-    ga_l: np.ndarray = np.asarray(ga_l, dtype=np.float64)
-    ga_u: np.ndarray = np.asarray(ga_u, dtype=np.float64)
     
     # Run optimization
     problem: ZdiffProblem = ZdiffProblem(target_zdiff_ohms=target_zdiff_ohms,
