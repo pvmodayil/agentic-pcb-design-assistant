@@ -1,7 +1,7 @@
 import asyncio
 from src.agents import coupled_microstrip_agent as cmsAgent
 from src.core.data_models import WorkflowResult
-
+from loguru import logger
 
 async def main() -> None:
     query: str = """
@@ -20,4 +20,5 @@ async def main() -> None:
     print(workflow_result)
     
 if __name__ == "__main__":
+    logger.start("Starting Agentic Run")
     asyncio.run(main())
