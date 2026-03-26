@@ -38,12 +38,28 @@ class ToolRegistry:
         return list(self._tools.keys())
     
     def get_tool_descriptions(self) -> str:
-        """json formatted description of tools"""
-        import json
-        descriptions = []
+        """Human-readable tool descriptions optimized for open-weight models."""
+        lines = []
         for name, tool in self._tools.items():
-            descriptions.append(json.dumps(tool.parameters_schema, indent=2))
-        return "\n\n".join(descriptions)
+            schema = tool.parameters_schema
+            lines.append(f"### {schema['name']}")
+            lines.append(f"Description: {schema['description']}")
+            
+            params = schema["parameters"]["properties"]
+            required = schema["parameters"].get("required", [])
+            
+            if params:
+                lines.append("Parameters:")
+                for pname, pdef in params.items():
+                    req_marker = " (required)" if pname in required else " (optional)"
+                    enum_hint = f", one of: {pdef['enum']}" if "enum" in pdef else ""
+                    default_hint = f", default: {pdef['default']}" if "default" in pdef else ""
+                    lines.append(
+                        f"  - {pname}{req_marker}: [{pdef['type']}] "
+                        f"{pdef['description']}{enum_hint}{default_hint}"
+                    )
+            lines.append("")  # blank line between tools
+        return "\n".join(lines)
     
     async def handle_tool_call(self, tool_name: str, tool_parameters: dict[str,Any]) -> ToolResult:
         """handle the tool call with validations"""
