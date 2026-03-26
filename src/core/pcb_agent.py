@@ -344,6 +344,7 @@ class ActionHandler(Generic[DepsType]):
         handler: HandlerFn | None = self._action_dispatch.get(action.action_type)
         
         if handler is None:
+            context.state.workflow_state = WorkflowState.ANALYZING
             return ActionResult(status=ActionStatus.ANALYZED, message=action.reasoning)
         try:
             return await handler(action, context, deps)
@@ -750,10 +751,11 @@ class PCBAgent(Generic[DepsType]):
         """
         current_query = self._get_workflow_state_info() + initial_query + start_instruction
         step_count = 0   
+        self.context.state.workflow_state = WorkflowState.ANALYZING
         
         try:
             while step_count < max_steps :
-                self.context.state.workflow_state = WorkflowState.ANALYZING
+                
                 step_count += 1
                 logger.info(f"Step {step_count}: State={self.context.state.workflow_state.name}")
                 logger.info(f"Current Checkpoint: {self.context.state.current_checkpoint}")
