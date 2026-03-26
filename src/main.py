@@ -43,8 +43,8 @@ def save_workflow_result(
             "saved_at": datetime.now().isoformat()
         }
         
-        with open(filepath, 'w', indent=2) as f:
-            json.dump(serializable_result, f, default=str)
+        with open(filepath, 'w') as f:
+            json.dump(serializable_result, f, indent=2, default=str)
     
     else:
         raise ValueError("format must be 'json'")
