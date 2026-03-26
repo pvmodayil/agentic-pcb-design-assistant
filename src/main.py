@@ -87,7 +87,7 @@ if __name__ == "__main__":
     datewise_uid = re.sub(r'[: ]', '-', str(datetime.now()))
 
     # Add handler (returns ID for later removal if needed)
-    file_name: str = "CoupledStripAgentRun_{datewise_uid}"
+    file_name: str = f"CoupledStripAgentRun_{datewise_uid}"
     log_file = f"logs/{file_name}.log"
     logger.add(log_file)
 
