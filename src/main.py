@@ -7,12 +7,20 @@ import re
 
 async def main() -> None:
     query: str = """
-    I would like to design a coupled microstrip arrangement to obtain a **target impedance: 90 Ohms**.
-    The fixed parametrs for the arrangement are:
-    material with a **dielectric constant: 4.5**,
-    **height of the arrangement: 250 micro meters**,
-    **thickness of the strip: 35 micro meters**,
-    and **spacing range in micro meters: (150, 300)**
+    I want to design a coupled microstrip line to achieve a target differential impedance of 90Ω.
+
+    Use the following fixed parameters:
+
+    Dielectric constant (εr): 4.5
+
+    Substrate height (h): 250µm
+
+    Conductor thickness (t): 35µm
+
+    Spacing range between lines (s): 150µm - 300µm
+    Tasks:
+
+    Optimise the geometric parameters for the target differential impedance
     """
     
     workflow_result: WorkflowResult = await cmsAgent.run_coupled_microstrip_agent(query=query)

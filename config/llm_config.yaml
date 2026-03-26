@@ -1,4 +1,4 @@
-provider: anthropic #anthropic openai ollama
+provider: openai #anthropic openai ollama
 
 ollama:
   llm:
@@ -21,9 +21,9 @@ anthropic:
     temperature: 0.1
 openai:
   llm:
-    model_name: gpt-5.2
+    model_name: gpt-5.4-mini
     temperature: 0.2
   
   mem_llm:
-    model_name: gpt-5.2
+    model_name: gpt-5.4-mini
     temperature: 0.1
