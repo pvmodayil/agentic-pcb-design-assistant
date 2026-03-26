@@ -3,6 +3,7 @@ from src.agents import coupled_microstrip_agent as cmsAgent
 from src.core.data_models import WorkflowResult
 from loguru import logger
 from datetime import datetime
+import re
 
 async def main() -> None:
     query: str = """
@@ -22,5 +23,12 @@ async def main() -> None:
     
 if __name__ == "__main__":
     datewise_uid: str =  str(datetime.now())
-    logger.start(f"logs/AgentRunLog_{datewise_uid}")
+    # Safe timestamp: replace invalid chars
+    datewise_uid = re.sub(r'[: ]', '-', str(datetime.now()))
+
+    # Add handler (returns ID for later removal if needed)
+    log_file = f"logs/AgentRunLog_{datewise_uid}.log"
+    logger.add(log_file)
+
+    logger.info("AgentRunLog_{datewise_uid}")
     asyncio.run(main())
