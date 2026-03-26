@@ -1,4 +1,5 @@
 import asyncio
+from typing import Optional
 from src.agents import coupled_microstrip_agent as cmsAgent
 from src.core.data_models import WorkflowResult
 from loguru import logger
@@ -10,7 +11,7 @@ from pathlib import Path
 
 def save_workflow_result(
     result: WorkflowResult, 
-    filename: str = None, 
+    filename: Optional[str] = None, 
     directory: str = "outputs",
     format: str = "json"  # "json" or "pickle"
 ) -> str:
@@ -32,7 +33,7 @@ def save_workflow_result(
             "success": result.success,
             "session_id": result.session_id,
             "workflow_type": result.workflow_type,
-            "final_state": result.final_state.dict() if hasattr(result.final_state, 'dict') else str(result.final_state),
+            "final_state": str(result.final_state),
             "completed_checkpoints": [cp.model_dump() if hasattr(cp, 'dict') else vars(cp) for cp in result.completed_checkpoints],
             "failed_checkpoints": [cp.model_dump() if hasattr(cp, 'dict') else vars(cp) for cp in result.failed_checkpoints],
             "results": result.results.model_dump() if hasattr(result.results, 'dict') else vars(result.results),
