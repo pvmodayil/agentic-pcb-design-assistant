@@ -794,7 +794,7 @@ class PCBAgent(Generic[DepsType]):
             )
             
         except Exception as e:
-            logger.error(f"Workflow error: {e}", exc_info=True)
+            logger.exception("Workflow error: {}", e) 
             self.context.state.workflow_state = WorkflowState.ERROR
             self.context.state.errors.append(str(e))
             

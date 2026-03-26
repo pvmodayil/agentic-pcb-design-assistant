@@ -1,7 +1,10 @@
 from pydantic_ai.messages import (ModelMessage, 
-                                  ModelRequest, 
+                                  ModelRequest,
+                                  ModelResponse, 
+                                  ToolCallPart,
                                   ToolReturnPart,
-                                  UserPromptPart)
+                                  UserPromptPart,
+                                  ArgsDict)
 import json
 from src.core.data_models import ToolResult, ActionResult, VerificationResult
 
@@ -20,6 +23,18 @@ class MessageFactory:
             tool_result.result_data if tool_result.success else {}, # Error message will be added later
             default=str,            # handles datetime, Decimal, etc.
         )
+
+        # Assistant message: synthetic tool USE (the "call" side)
+        tool_call_msg = ModelResponse(
+            parts=[
+                ToolCallPart(
+                    tool_name=tool_result.tool_name,
+                    args={},  # empty args since this is synthetic
+                    tool_call_id=tool_call_id,
+                )
+            ]
+        )
+    
         tool_return_msg = ModelRequest(
             parts=[
                 ToolReturnPart(
