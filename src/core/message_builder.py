@@ -3,8 +3,7 @@ from pydantic_ai.messages import (ModelMessage,
                                   ModelResponse, 
                                   ToolCallPart,
                                   ToolReturnPart,
-                                  UserPromptPart,
-                                  ArgsDict)
+                                  UserPromptPart)
 import json
 from src.core.data_models import ToolResult, ActionResult, VerificationResult
 
