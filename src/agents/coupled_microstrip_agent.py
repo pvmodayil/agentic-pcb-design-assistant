@@ -39,8 +39,8 @@ def _load_config(config_path: str = "coupled_microstrip_agent.yaml") -> dict[str
     
     # Extract optimization verification settings
     optimization: dict[str,Any] = {
-        'convergence_threshold': float(config['workflow']['convergence_threshold']),
-        'model_accuracy_threshold': int(config['workflow']['model_accuracy_threshold']),
+        'convergence_threshold': float(config['optimization']['convergence_threshold']),
+        'model_accuracy_threshold': int(config['optimization']['model_accuracy_threshold']),
     }
     
     return {'workflow': workflow, 'optimization': optimization}
