@@ -5,7 +5,54 @@ from loguru import logger
 from datetime import datetime
 import re
 
-async def main() -> None:
+import json
+from pathlib import Path
+
+def save_workflow_result(
+    result: WorkflowResult, 
+    filename: str = None, 
+    directory: str = "outputs",
+    format: str = "json"  # "json" or "pickle"
+) -> str:
+    """Save WorkflowResult to file in JSON or pickle format."""
+    # Create directory if it doesn't exist
+    Path(directory).mkdir(exist_ok=True)
+    
+    # Generate timestamp-based filename if none provided
+    if filename is None:
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        base_name = f"workflow_{result.session_id}_{result.workflow_type}_{timestamp}"
+        filename = f"{base_name}.{format}"
+    
+    filepath = Path(directory) / filename
+    
+    if format == "json":
+        # Convert to JSON-serializable dict
+        serializable_result = {
+            "success": result.success,
+            "session_id": result.session_id,
+            "workflow_type": result.workflow_type,
+            "final_state": result.final_state.dict() if hasattr(result.final_state, 'dict') else str(result.final_state),
+            "completed_checkpoints": [cp.model_dump() if hasattr(cp, 'dict') else vars(cp) for cp in result.completed_checkpoints],
+            "failed_checkpoints": [cp.model_dump() if hasattr(cp, 'dict') else vars(cp) for cp in result.failed_checkpoints],
+            "results": result.results.model_dump() if hasattr(result.results, 'dict') else vars(result.results),
+            "recommendations": result.recommendations,
+            "summary": result.summary,
+            "total_execution_time": result.total_execution_time,
+            "errors": result.errors,
+            "saved_at": datetime.now().isoformat()
+        }
+        
+        with open(filepath, 'w', indent=2) as f:
+            json.dump(serializable_result, f, default=str)
+    
+    else:
+        raise ValueError("format must be 'json'")
+    
+    print(f"✅ WorkflowResult saved to: {filepath}")
+    return str(filepath)
+
+async def main(file_name: str) -> None:
     query: str = """
     I want to design a coupled microstrip line to achieve a target differential impedance of 90Ω.
 
@@ -27,7 +74,12 @@ async def main() -> None:
     print("\n" + "="*80)
     print("Final workflow results")
     print("="*80)
-    print(workflow_result)
+    print(json.dumps(
+        workflow_result.model_dump(), 
+        indent=2, 
+        default=str,
+        ensure_ascii=False))
+    save_workflow_result(result=workflow_result, filename=file_name)
     
 if __name__ == "__main__":
     datewise_uid: str =  str(datetime.now())
@@ -35,8 +87,9 @@ if __name__ == "__main__":
     datewise_uid = re.sub(r'[: ]', '-', str(datetime.now()))
 
     # Add handler (returns ID for later removal if needed)
-    log_file = f"logs/AgentRunLog_{datewise_uid}.log"
+    file_name: str = "CoupledStripAgentRun_{datewise_uid}"
+    log_file = f"logs/{file_name}.log"
     logger.add(log_file)
 
     logger.info("AgentRunLog_{datewise_uid}")
-    asyncio.run(main())
+    asyncio.run(main(file_name=file_name))
