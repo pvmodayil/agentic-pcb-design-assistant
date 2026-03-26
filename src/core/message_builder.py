@@ -44,7 +44,7 @@ class MessageFactory:
             ]
         )
 
-        return [tool_return_msg]
+        return [tool_call_msg, tool_return_msg]
     
     @staticmethod
     def build_error_messages(action_result: ActionResult) -> list[ModelMessage]:

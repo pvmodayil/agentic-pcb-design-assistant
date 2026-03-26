@@ -666,6 +666,16 @@ class PCBAgent(Generic[DepsType]):
         - What you know so far
         - Why you are choosing this specific action
         - What you expect to learn or achieve from it
+
+        ## How to Call a Tool
+        When you need to use a tool, your ENTIRE response must be a single JSON object in this exact format:
+        ```
+        "action_type": "execute_tool",
+        "tool_name": "<exact tool name from the list above>",
+        "parameters": {{
+            "<param_name>": <value>
+        }},
+        "reasoning": "<why you are calling this tool>"
         """
         return system_prompt
     
