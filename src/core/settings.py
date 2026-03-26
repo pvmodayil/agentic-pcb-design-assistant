@@ -2,7 +2,7 @@ from pydantic_settings import BaseSettings
 from pydantic import Field
 import yaml
 from pathlib import Path
-from typing import NotRequired, TypedDict, Optional
+from typing import NotRequired, TypedDict
 from loguru import logger
 
 PROJECT_ROOT: Path = Path(__file__).resolve().parents[2]  # Up 2 levels: core -> src -> root
