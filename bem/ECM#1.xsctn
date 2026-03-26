@@ -18,15 +18,15 @@ GroundPlane ground  \
 	 -yOffset 0.0 \
 	 -xOffset 0.0
 DielectricLayer fr4  \
- -thickness 200.0 \
+ -thickness 250.0 \
 	 -lossTangent 0.0 \
- -permittivity 4.13 \
+ -permittivity 4.5 \
 	 -permeability 1.0 \
 	 -yOffset 0.0 \
 	 -xOffset 0.0
 RectangleConductors c1  \
- -width 379.15 \
- -pitch 2520.6600000000003 \
+ -width 387.28 \
+ -pitch 612.28 \
 	 -conductivity 5.0e7S/m \
  -height 35.0 \
 	 -number 2 \

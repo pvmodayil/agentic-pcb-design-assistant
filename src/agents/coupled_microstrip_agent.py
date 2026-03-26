@@ -24,7 +24,7 @@ PROJECT_ROOT: Path = Path(__file__).resolve().parents[2]  # Up 2 levels: agents 
 
 # Load requirements of the workflow
 #--------------------------------------------
-def _load_config(config_path: str = "coupled_microstrip.yaml") -> dict[str,Any]:
+def _load_config(config_path: str = "coupled_microstrip_agent.yaml") -> dict[str,Any]:
     """Load and return the the componenets from the config file"""
     full_config_path: Path = PROJECT_ROOT / "config" / "agent_config" /  config_path
     with open(full_config_path, 'r') as f:

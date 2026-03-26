@@ -620,9 +620,10 @@ class PCBAgent(Generic[DepsType]):
         2. Determine what information or calculations are needed
         3. Use the available tools to gather that information
         4. Verify the checkpoint result before proceeding
-        5. When all checkpoints are complete, finalize the workflow
-        6. Request human input when facing ambiguity or critical decisions
-        7. Provide clear reasoning for all actions
+        5. Once a checkpoint is successfully verified move on to the next checkpoint.
+        6. When all checkpoints are complete, finalize the workflow
+        7. Request human input when facing ambiguity or critical decisions
+        8. Provide clear reasoning for all actions
 
         ## Available Tools
         You have access to the following tools. Use ONLY these exact tool names: {tool_names_str}
@@ -644,6 +645,9 @@ class PCBAgent(Generic[DepsType]):
         **When to use `verify_checkpoint`**:
         - A tool has returned results and you are ready to confirm the checkpoint is satisfied
         - Set `checkpoint_name` to the checkpoint being verified
+        - Always set `tool_name` to one of: {tool_names} if a tool matches with the verification step
+        - Always populate `tool_parameters` with ALL required parameters for that tool
+        - Do not guess parameter values — if a required parameter is unknown, use `request_human_input` first
 
         **When to use `request_human_input`**:
         - A required parameter or decision cannot be determined from context
