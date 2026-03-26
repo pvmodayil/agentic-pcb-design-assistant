@@ -22,5 +22,5 @@ async def main() -> None:
     
 if __name__ == "__main__":
     datewise_uid: str =  str(datetime.now())
-    logger.start(f"AgentRunLog_{datewise_uid}")
+    logger.start(f"logs/AgentRunLog_{datewise_uid}")
     asyncio.run(main())
