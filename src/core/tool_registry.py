@@ -44,6 +44,9 @@ class ToolRegistry:
             schema = tool.parameters_schema
             lines.append(f"### {schema['name']}")
             lines.append(f"Description: {schema['description']}")
+            role: str = "verification tool" if schema['verification_tool'] else "normal tool"
+            lines.append(f"Role: {role}")
+            lines.append(f"Tool Category: {schema['category']}")
             
             params = schema["parameters"]["properties"]
             required = schema["parameters"].get("required", [])
@@ -71,7 +74,12 @@ class ToolRegistry:
         
         tool_def: ToolDefinition = self.get_tool_definition(tool_name)
         if not tool_def:
-            error_message = f"Tool definition missing: {tool_name}. Available tools in the tool registry: {self._tools.keys()}"
+            normal_tools = [
+            tool_name
+            for tool_name in list(self._tools.keys())
+            if not self._tools[tool_name].verification_tool
+            ]
+            error_message = f"Tool definition missing: {tool_name}. Available tools in the tool registry: {normal_tools}"
         
         # Validate parameters (custom validation logic for every tool)
         if tool_def and not error_message:

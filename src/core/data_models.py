@@ -90,6 +90,7 @@ class ToolDefinition(ABC,BaseModel):
     """
     name: str = Field(..., description="Unique tool identifier")
     description: str = Field(..., description="What the tool does")
+    verification_tool: Optional[bool] = Field(default=False, description="Tool type")
     category: Literal[
             "io",            # file/db/FS I/O
             "network",       # HTTP, APIs
@@ -142,6 +143,7 @@ class ToolDefinition(ABC,BaseModel):
         return {
             "name": self.name,
             "description": self.description,
+            "verification_tool": self.verification_tool,
             "category": self.category,
             "parameters": {
                 "type": "object",

@@ -620,9 +620,13 @@ class PCBAgent(Generic[DepsType]):
         
         tool_descriptions: str = self.context.tool_registry.get_tool_descriptions()
         # Pull exact tool names for the "available tool names" reminder
-        tool_names = list(self.context.tool_registry._tools.keys())
-        tool_names_str = ", ".join(f'"{n}"' for n in tool_names)
-
+        tool_names: list[str] = list(self.context.tool_registry._tools.keys())
+        tool_names_str: str = ", ".join(f'"{n}"' for n in tool_names)
+        verification_tools: list[str] = [
+            tool_name
+            for tool_name in tool_names
+            if self.context.tool_registry._tools[tool_name].verification_tool
+        ]
         system_prompt: str = f"""
         **You are an expert '{self._agent_type}' agent engaged in the PCB design workflow with the given task/goal.**
         
@@ -652,6 +656,7 @@ class PCBAgent(Generic[DepsType]):
         - Always set `tool_name` to one of: {tool_names}
         - Always populate `tool_parameters` with ALL required parameters for that tool
         - Do not guess parameter values — if a required parameter is unknown, use `request_human_input` first
+        - Do not call execute_tool if it is a verification tool
 
         **When to use `analyze`**:
         - You need to reason about the current state before deciding the next step
@@ -660,7 +665,7 @@ class PCBAgent(Generic[DepsType]):
         **When to use `verify_checkpoint`**:
         - A tool has returned results and you are ready to confirm the checkpoint is satisfied
         - Set `checkpoint_name` to the checkpoint being verified
-        - Always set `tool_name` to one of: {tool_names} if a tool matches with the verification step
+        - Always set `tool_name` to one of: {verification_tools} if a verification tool matches with the verification step
         - Always populate `tool_parameters` with ALL required parameters for that tool
         - Do not guess parameter values — if a required parameter is unknown, use `request_human_input` first
 
@@ -685,16 +690,6 @@ class PCBAgent(Generic[DepsType]):
         - What you know so far
         - Why you are choosing this specific action
         - What you expect to learn or achieve from it
-
-        ## How to Call a Tool
-        When you need to use a tool, your ENTIRE response must be a single JSON object in this exact format:
-        ```
-        "action_type": "execute_tool",
-        "tool_name": "<exact tool name from the list above>",
-        "parameters": {{
-            "<param_name>": <value>
-        }},
-        "reasoning": "<why you are calling this tool>"
         """
         return system_prompt
     

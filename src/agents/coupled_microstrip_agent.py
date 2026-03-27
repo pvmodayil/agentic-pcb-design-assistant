@@ -116,7 +116,9 @@ tool_registry: ToolRegistry = ToolRegistry()
 
 tool_registry.register_tool(tool_def=cmpo_tool.get_tool_definition(),
                             tool_func=cmpo_tool.get_tool_func())
-tool_registry.register_tool(tool_def=bfs_tool.get_tool_definition(),
+bfs_tool_def = bfs_tool.get_tool_definition()
+bfs_tool_def.verification_tool = True # In this case BEM simulation is used as a verification tool, hence the mark
+tool_registry.register_tool(tool_def=bfs_tool_def,
                             tool_func=bfs_tool.get_tool_func())
 
 # Define the agent
