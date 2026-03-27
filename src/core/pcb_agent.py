@@ -621,7 +621,11 @@ class PCBAgent(Generic[DepsType]):
         tool_descriptions: str = self.context.tool_registry.get_tool_descriptions()
         # Pull exact tool names for the "available tool names" reminder
         tool_names: list[str] = list(self.context.tool_registry._tools.keys())
-        tool_names_str: str = ", ".join(f'"{n}"' for n in tool_names)
+        normal_tools: list[str] = [
+            tool_name
+            for tool_name in tool_names
+            if not self.context.tool_registry._tools[tool_name].verification_tool
+        ]
         verification_tools: list[str] = [
             tool_name
             for tool_name in tool_names
@@ -645,15 +649,18 @@ class PCBAgent(Generic[DepsType]):
         8. Provide clear reasoning for all actions
 
         ## Available Tools
-        You have access to the following tools. Use ONLY these exact tool names: {tool_names_str}
+        You have access to the following tools. 
+        Normal tools to be called with execute_tool action:  {normal_tools}
+        Verification tools to be called with verify_checkpoint action: {verification_tools}
 
+        ### Tool Descriptions:
         {tool_descriptions}
 
         ## Action Guidelines
 
         **When to use `execute_tool`**:
         - You need data or a calculation that a tool can provide
-        - Always set `tool_name` to one of: {tool_names}
+        - Always set `tool_name` to one of: {normal_tools}
         - Always populate `tool_parameters` with ALL required parameters for that tool
         - Do not guess parameter values — if a required parameter is unknown, use `request_human_input` first
         - Do not call execute_tool if it is a verification tool

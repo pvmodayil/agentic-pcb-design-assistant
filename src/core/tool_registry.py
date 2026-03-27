@@ -42,7 +42,7 @@ class ToolRegistry:
         lines = []
         for name, tool in self._tools.items():
             schema = tool.parameters_schema
-            lines.append(f"### {schema['name']}")
+            lines.append(f"#### {schema['name']}")
             lines.append(f"Description: {schema['description']}")
             role: str = "verification tool" if schema['verification_tool'] else "normal tool"
             lines.append(f"Role: {role}")
