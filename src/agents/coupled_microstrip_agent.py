@@ -7,9 +7,11 @@ for the given target impedance. Verifications will be done using simulations wit
 import yaml
 from pathlib import Path
 from typing import Any, Optional
+from pydantic import Field
+
 from src.core.tool_registry import ToolRegistry
 from src.core.pcb_agent import PCBAgent
-from src.core.data_models import  Checkpoint, WorkflowResult, VerificationResult
+from src.core.data_models import  Checkpoint, WorkflowResult, VerificationResult, FinalResults
 
 from src.tools import coupled_microstrip_parameter_optimizer_tool as cmpo_tool
 from src.tools import bem_field_solver_simulator as bfs_tool
@@ -123,10 +125,23 @@ tool_registry.register_tool(tool_def=bfs_tool_def,
 
 # Define the agent
 #-----------------------------------------------------
+class CoupledStripFinalResults(FinalResults):
+    """
+    Use case specific extension of FinalResults.
+    Gives the LLM the exact keys you want for the final geometry.
+    """
+    trace_width_um: float = Field(..., description="Final optimized trace width in micrometers")
+    trace_spacing_um: float = Field(..., description="Final edge‑to‑edge trace spacing in micrometers")
+    height_um: float = Field(..., description="Dielectric height in micrometers")
+    thickness_um: float = Field(..., description="Copper thickness in micrometers")
+    dielectric_constant: float = Field(..., description="Effective dielectric constant (Er)")
+    error_percent: float = Field(..., description="Percent error vs target (e.g., 90 Ω differential impedance)")
+    
 coupled_strip_agent: PCBAgent = PCBAgent(agent_type="Coupled Microstrip Agent",
                                          task="Optimise the geometric parameters of the coupled microstrip strip arrangement",
                                          list_checkpoints=checkpoints,
-                                         tool_registry=tool_registry)
+                                         tool_registry=tool_registry,
+                                         final_results_type=CoupledStripFinalResults)
 #------------------------------------------
 # Public API
 #------------------------------------------
