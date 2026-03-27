@@ -521,6 +521,20 @@ class ActionHandler(Generic[DepsType]):
                                   context: AgentContext,
                                   deps: DepsType) -> ActionResult:
         """Mark workflow as complete"""
+        
+        # Check if the checkpoints are completed
+        if context.state.pending_checkpoints:
+            context.state.workflow_state = WorkflowState.AGENT_ERROR
+            return ActionResult(status=ActionStatus.ERROR, error_message="""There are pending checkpoints, complete the checkpoints 
+                                and verify them before ending the workflow""")
+        
+        # Check if the current checkpoint is completed
+        current_checkpoint: Optional[str] = context.state.current_checkpoint
+        if current_checkpoint and not(context.checkpoint_objects[current_checkpoint].status == "completed"):
+            context.state.workflow_state = WorkflowState.AGENT_ERROR
+            return ActionResult(status=ActionStatus.ERROR, error_message="""The cuurent checkpoint is not yet verified and completed.
+                                Verify this checkpoint before moving forward.""")
+            
         context.state.workflow_state = WorkflowState.COMPLETED
         return ActionResult(status=ActionStatus.WORKFLOW_COMPLETED, message="Workflow completed")
          
