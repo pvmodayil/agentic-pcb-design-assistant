@@ -36,7 +36,9 @@ This project implements a sophisticated agentic framework for automating PCB des
 ## Project Structure
 
 ```
-config/         # Configuration files
+config/                             # Configuration files
+docs/                               # Zensical docs
+outputs/                            # Output files
 src/
 ├── core/                           # Core agent implementation
 │   ├── pcb_agent.py                # Base agent class
@@ -54,6 +56,9 @@ src/
 │   ├── input_protocol.py           # Input protocols
 ├── tools/                          # Tool implementations
 └── utils/                          # Utility functions
+README.md                           # Main README file
+pyproject.toml                      # Pyhton project dependencies with UV
+zensical.toml                       # Zensical docs configs
 ```
 
 ## Getting Started
@@ -75,9 +80,13 @@ Edit `src/agents/config/config.yaml` to configure agents and MCP servers.
 Run the main application:
 
 ```bash
-uv run src/main.py
+uv run -m src.main.py
 ```
+### Docs
 
+```bash
+uv run zensical serve
+```
 ## Contributing
 
 This project is part of the [Information Processing Lab's](https://dt.etit.tu-dortmund.de/en/) agentic AI research initiative.

@@ -1,0 +1,84 @@
+
+2026 03 26 15:48:51 modayil NMMTL_2DLF
+
+File = ECM#1
+Number of Signal Lines  =   2
+Number of Ground Planes =   1
+Number of Ground Wires  =   0
+Coupling Length =   0.00000 meters
+Rise Time =   250.0000 picoseconds
+Contour (conductor) segments [cseg] = 10
+Ground Plane/Dielectric segments [dseg] = 10
+Conductivity c1R1 = 5e+007 siemens/meter
+Conductivity c1R0 = 5e+007 siemens/meter
+Note: minimum frequency for surface current assumptions is 414 MHz.
+Mutual and Self Electrostatic Induction:
+B(Active Signal , Passive Signal) Farads/Meter
+B( ::c1R1 , ::c1R1 )=  1.1079002e-010
+B( ::c1R1 , ::c1R0 )= -1.1787083e-011
+B( ::c1R0 , ::c1R1 )= -1.1618513e-011
+B( ::c1R0 , ::c1R0 )=  1.1080940e-010
+
+Mutual and Self Inductance:
+L(Active Signal , Passive Signal) Henrys/Meter
+L( ::c1R1 , ::c1R1 )=  3.1494662e-007
+L( ::c1R1 , ::c1R0 )=  6.7078410e-008
+L( ::c1R0 , ::c1R1 )=  6.7094042e-008
+L( ::c1R0 , ::c1R0 )=  3.1492044e-007
+
+Asymmetry Ratios:
+
+  Asymmetry ratio for inductance matrix:
+     0.023304% (max), 0.023304% (average)
+
+**********
+  Asymmetry ratio for electrostatic induction matrix:
+     1.430132% (max), 1.430132% (average).
+  (Note values greater than 1% are a probable indication of too few elements.
+  Try adjusting CSEG and DSEG attributes.)
+**********
+
+Characteristic Impedance (Ohms):
+For Signal Line ::c1R1= 53.3173
+For Signal Line ::c1R0= 53.3104
+
+Characteristic Impedance Odd/Even (Ohms):
+  odd= 44.9682
+ even= 62.1186
+
+Effective Dielectric Constant:
+For Signal Line ::c1R1= 2.99787
+For Signal Line ::c1R0= 2.99814
+
+Propagation Velocity (meters/second):
+For Signal Line ::c1R1=  1.7314685e+008
+For Signal Line ::c1R0=  1.7313891e+008
+
+Propagation Velocity Odd/Even (meters/second):
+  odd= 1.8142e+008
+ even= 1.62604e+008
+
+Propagation Delay (seconds/meter):
+For Signal Line ::c1R1=  5.7754444e-009
+For Signal Line ::c1R0=  5.7757092e-009
+
+Propagation Delay Odd/Even (seconds/meter):
+  odd= 5.51207e-009
+ even= 6.14993e-009
+
+Rdc:
+Rdc(Active Signal , Passive Signal) Ohms/Meter
+Rdc( ::c1R1 , ::c1R1 )=  1.4754921e+000
+Rdc( ::c1R1 , ::c1R0 )=  0.0000000e+000
+Rdc( ::c1R0 , ::c1R1 )=  0.0000000e+000
+Rdc( ::c1R0 , ::c1R0 )=  1.4754921e+000
+
+Far-End (Forward) Cross Talk:
+FXT(Active Signal, Passive Signal)
+FXT( ::c1R1 , ::c1R0 )= -1.27809e-007 =  -137.86877 dB
+
+Near-End (Backward) Cross Talk:
+BXT(Active Signal, Passive Signal)
+BXT( ::c1R1 , ::c1R0 )= 3.67206e-007 =  -128.70182 dB
+
+NOTE: Cross talk results assume there are no reflections.

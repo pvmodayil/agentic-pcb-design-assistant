@@ -15,7 +15,7 @@ from typing import Any, Optional, Callable
 import yaml
 
 from src.core.data_models import ToolParameter, ToolDefinition
-PROJECT_ROOT: Path = Path(__file__).resolve().parents[3]  # Up 3 levels: tools -> src -> root
+PROJECT_ROOT: Path = Path(__file__).resolve().parents[2]  # Up 2 levels: tools -> src -> root
 
 #------------------------------------------
 # Internal
@@ -88,8 +88,8 @@ class ZdiffProblem(Problem):
                                 norm_min=self.norm_min,
                                 norm_max=self.norm_max, 
                                 model_session=self.model_session)
-        z_odd: float = Y[:, 1].item()
-        z_diff: float = 2.0 * z_odd
+        z_odd: np.ndarray = Y[:, 1]
+        z_diff: np.ndarray = 2.0 * z_odd
         out["F"] = (z_diff - self.target) ** 2
 
 class CoupledStripOptimizerToolDefinition(ToolDefinition):
@@ -203,29 +203,26 @@ def optimize_coupled_strip_parameters(
             ("dielectric", dielectric_constant, er_range, min_er, max_er)
         ]
     
-    ga_l = np.array([])
-    ga_u = np.array([])
+    ga_l: np.ndarray = np.array([], dtype=np.float64)
+    ga_u: np.ndarray = np.array([], dtype=np.float64)
     param_status: dict[str, Any] = {}
     
     for name, fixed_val, custom_range, default_min, default_max in param_configs:
         if fixed_val is not None:
             # FIXED to specific value
-            np.append(ga_l,float(fixed_val))
-            np.append(ga_u,float(fixed_val))
+            ga_l = np.append(ga_l,float(fixed_val))
+            ga_u = np.append(ga_u,float(fixed_val))
             param_status[name] = f"fixed at {fixed_val}"
         elif custom_range is not None:
             # OPTIMIZE in custom range
-            np.append(ga_l,float(custom_range[0]))
-            np.append(ga_u,float(custom_range[1]))
+            ga_l = np.append(ga_l,float(custom_range[0]))
+            ga_u = np.append(ga_u,float(custom_range[1]))
             param_status[name] = f"optimize in [{custom_range[0]}, {custom_range[1]}]"
         else:
             # OPTIMIZE in default range
-            np.append(ga_l,float(default_min))
-            np.append(ga_u,float(default_max))
+            ga_l = np.append(ga_l,float(default_min))
+            ga_u = np.append(ga_u,float(default_max))
             param_status[name] = f"optimize in [{default_min}, {default_max}]"
-    
-    ga_l: np.ndarray = np.asarray(ga_l, dtype=np.float64)
-    ga_u: np.ndarray = np.asarray(ga_u, dtype=np.float64)
     
     # Run optimization
     problem: ZdiffProblem = ZdiffProblem(target_zdiff_ohms=target_zdiff_ohms,

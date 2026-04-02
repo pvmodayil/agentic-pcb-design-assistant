@@ -19,32 +19,32 @@ input_parameters:
   spacing_range_um:
     type: "array"
     description: "Custom spacing range [min, max] in µm. Example: [100, 500] to optimize spacing between 100-500µm."
-    required: False
+    required: True
  
   trace_spacing_um:
     type: "number"
     description: "Edge-to-edge spacing in micrometers. Leave null to optimize"
-    required: False
+    required: True
     min: 50.0
     max: 3000.0
   
   height_um:
     type: "number"
     description: "Dielectric height. Leave null to optimize."
-    required: False
+    required: True
     min: 50.0
     max: 500.0 
   
   thickness_um:
     type: "number"
     description: "Copper thickness in micrometers. Leave null to optimize"
-    required: False
+    required: True
     min: 5.0
     max: 50.0
 
   dielectric_constant:
     type: "number"
     description: "PCB dielectric constant (Er). Leave null to optimize."
-    required: False
+    required: True
     min: 2.0
     max: 6.0  

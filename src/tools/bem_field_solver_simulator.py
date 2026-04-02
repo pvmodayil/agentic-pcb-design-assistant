@@ -9,7 +9,7 @@ import yaml
 
 from src.core.data_models import ToolParameter, ToolDefinition
 
-PROJECT_ROOT: Path = Path(__file__).resolve().parents[3]  # Up 3 levels: tools -> src -> root
+PROJECT_ROOT: Path = Path(__file__).resolve().parents[2]  # Up 2 levels: tools -> src -> root
 
 #------------------------------------------
 # Internal
@@ -23,8 +23,8 @@ def _load_config(config_path: str = "bem_field_solver_simulator.yaml") -> dict[s
     # Extract BEM-specific settings
     bem_config: dict[str,Any] = {
         'executable_path': Path(config['bem']['executable']),
-        'template_path': PROJECT_ROOT / "outputs" / config['bem']['template'],
-        'resultfile_path': PROJECT_ROOT / "outputs" / config['bem']['resultfile'],
+        'template_path': PROJECT_ROOT / config['bem']['template'],
+        'resultfile_path': PROJECT_ROOT / config['bem']['result_file'],
         'timeout': int(config['bem']['timeout']) # value in seconds
     }
 

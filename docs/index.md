@@ -1,17 +1,21 @@
-# Welcome to MkDocs
+---
+title: Agentic PCB Design Assistant
+description: Build intelligent PCB design workflows with AI agents.
+---
 
-For full documentation visit [mkdocs.org](https://www.mkdocs.org).
+<div class="hero" markdown>
+<div class="hero-grid"></div>
+<p class="hero-label">Agentic PCB Design Assistant</p>
 
-## Commands
+# Build intelligent *PCB design* workflows **with AI agents.**
 
-* `mkdocs new [dir-name]` - Create a new project.
-* `mkdocs serve` - Start the live-reloading docs server.
-* `mkdocs build` - Build the documentation site.
-* `mkdocs -h` - Print help message and exit.
+<p class="subtitle">
+A composable framework for PCB designers to build, configure, and run
+LLM-powered agents — from single-step validators to full multi-agent pipelines.
+</p>
 
-## Project layout
+[Getting Started](getting-started/index.md){ .md-button .md-button--primary }
+[Core Concepts](core-concepts/index.md){ .md-button }
+</div>
 
-    mkdocs.yml    # The configuration file.
-    docs/
-        index.md  # The documentation homepage.
-        ...       # Other markdown pages, images and other files.
+---

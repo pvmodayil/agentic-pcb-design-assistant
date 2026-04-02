@@ -1,0 +1,68 @@
+[project]
+site_name        = "Agentic PCB Design Assistant"
+site_description = "An intelligent, agent-based PCB design automation assistant powered by AI."
+site_author      = "Philip Varghese Modayil"
+copyright        = "Copyright &copy; 2026 Philip Varghese Modayil"
+docs_dir         = "docs"
+site_dir         = "site"
+extra_css        = ["stylesheets/extra.css"]
+#site_url        = "https://www.example.com/"
+
+nav = [
+  { "Home"            = "index.md" },
+  { "About"            = "about.md"},
+  { "Getting Started"   = [
+      { "Getting Started"  = "getting-started/index.md" },
+      { "Tool Definition"   = "getting-started/setup_tool.md" },
+      { "Agent Definition"     = "getting-started/create_agent.md" }
+  ]},
+  { "Core Concepts"   = [
+    { "Core Concepts"   = "core-concepts/index.md"},
+    { "Data Models"     = "core-concepts/data_models.md"},
+    { "Tool Registry"     = "core-concepts/tool_registry.md"},
+    { "Control Flow"     = "core-concepts/control_flow.md"},
+  ]},
+]
+
+[project.theme]
+language = "en"
+features = [
+    "announce.dismiss",
+    "content.code.annotate",
+    "content.code.copy",
+    "content.code.select",
+    "content.footnote.tooltips",
+    "content.tabs.link",
+    "content.tooltips",
+    "header.autohide",
+    "navigation.expand",
+    "navigation.footer",
+    "navigation.indexes",
+    "navigation.instant",
+    "navigation.instant.prefetch",
+    "navigation.instant.progress",
+    "navigation.path",
+    "navigation.prune",
+    "navigation.sections",
+    "navigation.tabs",
+    "navigation.tabs.sticky",
+    "navigation.top",
+    "navigation.tracking",
+    "search.highlight",
+    "toc.follow",
+    "toc.integrate",
+]
+
+[[project.theme.palette]]
+scheme      = "slate"
+toggle.icon = "lucide/moon"
+toggle.name = "Switch to light mode"
+
+[[project.theme.palette]]
+scheme      = "default"
+toggle.icon = "lucide/sun"
+toggle.name = "Switch to dark mode"
+
+[project.theme.font]
+text = "IBM Plex Sans"
+code = "IBM Plex Mono"
