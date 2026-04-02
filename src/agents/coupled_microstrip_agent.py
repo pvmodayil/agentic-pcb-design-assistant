@@ -7,14 +7,18 @@ for the given target impedance. Verifications will be done using simulations wit
 import yaml
 from pathlib import Path
 from typing import Any, Optional
+from pydantic import Field
+
 from src.core.tool_registry import ToolRegistry
 from src.core.pcb_agent import PCBAgent
-from src.core.data_models import  Checkpoint, WorkflowResult, VerificationResult
+from src.core.data_models import  Checkpoint, WorkflowResult, VerificationResult, FinalResults
 
 from src.tools import coupled_microstrip_parameter_optimizer_tool as cmpo_tool
 from src.tools import bem_field_solver_simulator as bfs_tool
 
-PROJECT_ROOT: Path = Path(__file__).resolve().parents[3]  # Up 3 levels: agents -> src -> root
+from loguru import logger
+
+PROJECT_ROOT: Path = Path(__file__).resolve().parents[2]  # Up 2 levels: agents -> src -> root
 
 #------------------------------------------
 # Internal
@@ -22,7 +26,7 @@ PROJECT_ROOT: Path = Path(__file__).resolve().parents[3]  # Up 3 levels: agents 
 
 # Load requirements of the workflow
 #--------------------------------------------
-def _load_config(config_path: str = "coupled_microstrip.yaml") -> dict[str,Any]:
+def _load_config(config_path: str = "coupled_microstrip_agent.yaml") -> dict[str,Any]:
     """Load and return the the componenets from the config file"""
     full_config_path: Path = PROJECT_ROOT / "config" / "agent_config" /  config_path
     with open(full_config_path, 'r') as f:
@@ -37,8 +41,8 @@ def _load_config(config_path: str = "coupled_microstrip.yaml") -> dict[str,Any]:
     
     # Extract optimization verification settings
     optimization: dict[str,Any] = {
-        'convergence_threshold': float(config['workflow']['convergence_threshold']),
-        'model_accuracy_threshold': int(config['workflow']['model_accuracy_threshold']),
+        'convergence_threshold': float(config['optimization']['convergence_threshold']),
+        'model_accuracy_threshold': int(config['optimization']['model_accuracy_threshold']),
     }
     
     return {'workflow': workflow, 'optimization': optimization}
@@ -100,8 +104,8 @@ async def verify_optimization(target_zdiff: float, optimized_zdiff: float, simul
 #--------------------------------------------
 checkpoints: list[Checkpoint] = [
     Checkpoint(
-        name="optimize_coupled_microstrip_geometry_parameters",
-        description="Optimize geometric parameters using coupled microstrip optimizer",
+        name="Optimized Geometric Design",
+        description="Optimize geometric parameters for the coupled microstrip arrangement using relevant tools",
         verification_strategy="heuristics",
         verification_tool_name="simulate_bem", # Match with the name in the ToolDefinition
         verifier_function=verify_optimization
@@ -114,20 +118,36 @@ tool_registry: ToolRegistry = ToolRegistry()
 
 tool_registry.register_tool(tool_def=cmpo_tool.get_tool_definition(),
                             tool_func=cmpo_tool.get_tool_func())
-tool_registry.register_tool(tool_def=bfs_tool.get_tool_definition(),
+bfs_tool_def = bfs_tool.get_tool_definition()
+bfs_tool_def.verification_tool = True # In this case BEM simulation is used as a verification tool, hence the mark
+tool_registry.register_tool(tool_def=bfs_tool_def,
                             tool_func=bfs_tool.get_tool_func())
 
 # Define the agent
 #-----------------------------------------------------
+class CoupledStripFinalResults(FinalResults):
+    """
+    Use case specific extension of FinalResults.
+    Gives the LLM the exact keys you want for the final geometry.
+    """
+    trace_width_um: float = Field(..., description="Final optimized trace width in micrometers")
+    trace_spacing_um: float = Field(..., description="Final edge‑to‑edge trace spacing in micrometers")
+    height_um: float = Field(..., description="Dielectric height in micrometers")
+    thickness_um: float = Field(..., description="Copper thickness in micrometers")
+    dielectric_constant: float = Field(..., description="Effective dielectric constant (Er)")
+    error_percent: float = Field(..., description="Percent error vs target (e.g., 90 Ω differential impedance)")
+    
 coupled_strip_agent: PCBAgent = PCBAgent(agent_type="Coupled Microstrip Agent",
                                          task="Optimise the geometric parameters of the coupled microstrip strip arrangement",
                                          list_checkpoints=checkpoints,
-                                         tool_registry=tool_registry)
+                                         tool_registry=tool_registry,
+                                         final_results_type=CoupledStripFinalResults)
 #------------------------------------------
 # Public API
 #------------------------------------------
 async def run_coupled_microstrip_agent(query: str) -> WorkflowResult:
     """Public API to invoke the agent"""
+    logger.info("Starting Coupled Microstrip Agent")
     workflow_result: WorkflowResult = await coupled_strip_agent.run(initial_query=query,)
-    
+    logger.info("Coupled Microstrip Agent Workflow Ended")
     return workflow_result

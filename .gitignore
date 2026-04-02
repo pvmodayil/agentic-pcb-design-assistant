@@ -6,3 +6,6 @@ site/*
 
 # Ignore outputs
 outputs/*
+
+# Ignore logs
+logs/*

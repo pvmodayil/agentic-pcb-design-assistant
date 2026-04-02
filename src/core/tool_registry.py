@@ -3,8 +3,7 @@ import inspect
 from typing import get_type_hints
 from loguru import logger
 
-from .data_models import ToolDefinition
-from .data_models import ToolResult
+from src.core.data_models import ToolDefinition, ToolResult
 #--------------------------------------------
 # Tool Registry (To Register Tools for Agent)
 #--------------------------------------------
@@ -39,12 +38,31 @@ class ToolRegistry:
         return list(self._tools.keys())
     
     def get_tool_descriptions(self) -> str:
-        """json formatted description of tools"""
-        import json
-        descriptions = []
+        """Human-readable tool descriptions optimized for open-weight models."""
+        lines = []
         for name, tool in self._tools.items():
-            descriptions.append(json.dumps(tool.parameters_schema, indent=2))
-        return "\n\n".join(descriptions)
+            schema = tool.parameters_schema
+            lines.append(f"#### {schema['name']}")
+            lines.append(f"Description: {schema['description']}")
+            role: str = "verification tool" if schema['verification_tool'] else "normal tool"
+            lines.append(f"Role: {role}")
+            lines.append(f"Tool Category: {schema['category']}")
+            
+            params = schema["parameters"]["properties"]
+            required = schema["parameters"].get("required", [])
+            
+            if params:
+                lines.append("Parameters:")
+                for pname, pdef in params.items():
+                    req_marker = " (required)" if pname in required else " (optional)"
+                    enum_hint = f", one of: {pdef['enum']}" if "enum" in pdef else ""
+                    default_hint = f", default: {pdef['default']}" if "default" in pdef else ""
+                    lines.append(
+                        f"  - {pname}{req_marker}: [{pdef['type']}] "
+                        f"{pdef['description']}{enum_hint}{default_hint}"
+                    )
+            lines.append("")  # blank line between tools
+        return "\n".join(lines)
     
     async def handle_tool_call(self, tool_name: str, tool_parameters: dict[str,Any]) -> ToolResult:
         """handle the tool call with validations"""
@@ -56,13 +74,20 @@ class ToolRegistry:
         
         tool_def: ToolDefinition = self.get_tool_definition(tool_name)
         if not tool_def:
-            error_message = f"Tool definition missing: {tool_name}"
+            normal_tools = [
+            tool_name
+            for tool_name in list(self._tools.keys())
+            if not self._tools[tool_name].verification_tool
+            ]
+            error_message = f"Tool definition missing: {tool_name}. Available tools in the tool registry: {normal_tools}"
         
         # Validate parameters (custom validation logic for every tool)
         if tool_def and not error_message:
             schema_errors: list|None = tool_def.validate_parameter_schema(tool_parameters)
             if schema_errors:
-                error_message = f"Tool '{tool_name}' parameters failed schema validation with errors: {schema_errors}"
+                schema = tool_def.parameters_schema["parameters"]
+                error_message = f"""Tool '{tool_name}' parameters failed schema validation with errors: {schema_errors}
+                The correct parameter schema for this tool: {schema}"""
         
         if tool_def and not error_message:
             parameter_errors: list|None = tool_def.validate_parameters(tool_parameters)
@@ -87,7 +112,7 @@ class ToolRegistry:
                 logger.success(f"Executed tool: {tool_name}")
                 return tool_result
             except Exception as e:
-                logger.error(f"Tool execution failed: {e}", exc_info=True)
+                logger.exception(f"Tool execution failed: {e}", exc_info=True)
                 error_message=f"Tool {tool_name} execution failed: {e}"
         
         # Return error result

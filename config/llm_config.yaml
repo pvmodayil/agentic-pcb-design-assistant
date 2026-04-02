@@ -1,9 +1,29 @@
-llm:
-  model_name: gemma3
-  base_url: http://localhost:11434/v1
-  temperature: 0.4
+provider: anthropic #anthropic openai ollama
 
-mem_llm:
-  model_name: gemma3n
-  base_url: http://localhost:11434/v1
-  temperature: 0.4
+ollama:
+  llm:
+    model_name: qwen3-next:80b #  nemotron-3-super:120b
+    base_url: http://localhost:11434/v1
+    temperature: 0.1
+
+  mem_llm:
+    model_name: phi4-mini-reasoning:3.8b
+    base_url: http://localhost:11434/v1
+    temperature: 0.1
+
+anthropic:
+  llm:
+    model_name: claude-sonnet-4-6
+    temperature: 0.1
+  
+  mem_llm:
+    model_name: claude-sonnet-4-6
+    temperature: 0.1
+openai:
+  llm:
+    model_name: gpt-5.4
+    temperature: 0.1
+  
+  mem_llm:
+    model_name: gpt-5.4-mini
+    temperature: 0.1

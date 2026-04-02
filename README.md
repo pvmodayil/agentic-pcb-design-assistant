@@ -80,7 +80,7 @@ Edit `src/agents/config/config.yaml` to configure agents and MCP servers.
 Run the main application:
 
 ```bash
-uv run src/main.py
+uv run -m src.main.py
 ```
 ### Docs
 
